@@ -2,11 +2,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { footerConfig, profileConfig } from "@/config";
-import { url } from "@/utils/url-utils";
 
 const currentYear = new Date().getFullYear();
 
-// 读取FooterConfig.html文件内容
 let customFooterHtml = "";
 if (footerConfig.enable) {
 	try {
@@ -17,64 +15,122 @@ if (footerConfig.enable) {
 			"FooterConfig.html",
 		);
 		customFooterHtml = fs.readFileSync(footerConfigPath, "utf-8");
-		// 移除HTML注释
 		customFooterHtml = customFooterHtml.replace(/<!--[\s\S]*?-->/g, "").trim();
 	} catch (error) {
 		console.warn(
-			"FooterConfig.html文件读取失败:",
+			"FooterConfig.html 文件读取失败:",
 			error instanceof Error ? error.message : String(error),
 		);
 	}
 }
 ---
 
+<footer class="site-footer mx-auto mb-12 mt-10 w-full max-w-(--page-width) px-6 sm:px-10 lg:px-16">
+	<div class="footer-divider" aria-hidden="true">
+		<span class="footer-divider-line"></span>
+	</div>
 
-<div
-  class="transition border-t border-black/10 dark:border-white/15 my-10 border-dashed mx-32"
->
-</div>
+	<div class="footer-content">
+		{customFooterHtml && <div class="footer-custom" set:html={customFooterHtml} />}
 
-<div
-  class="transition border-dashed border-[oklch(85%_0.01_var(--hue))] dark:border-white/15 rounded-2xl mb-12 flex flex-col items-center justify-center px-6"
->
-  <div class="transition text-50 text-sm text-center wrap">
-    <div class="mb-2">
-      {customFooterHtml && <div set:html={customFooterHtml} />}
-    </div>
-    <div class="m-0.5 flex gap-2 justify-center flex-wrap">
-      &copy; <span id="copyright-year">{currentYear}</span>
-      {profileConfig.name}. All Rights Reserved.
-      <span aria-hidden="true">/</span>
-      <a
-        class="transition link text-(--primary) font-medium"
-        target="_blank"
-        href={url("rss.xml")}>RSS</a
-      >
-      <span aria-hidden="true">/</span>
-      <a
-        class="transition link text-(--primary) font-medium"
-        target="_blank"
-        href={url("sitemap-index.xml")}>Sitemap</a
-      >
-    </div>
-    <div class="m-0.5 flex gap-2 justify-center flex-wrap">
-      <span>Powered by</span>
-      <a
-        class="transition link text-(--primary) font-medium"
-        target="_blank"
-        href="https://astro.build">Astro</a
-      >
-      <span aria-hidden="true">&</span>
-      <a
-        class="transition link text-(--primary) font-medium"
-        target="_blank"
-        href="https://github.com/CuteLeaf/Firefly">Firefly</a
-      >
-    </div>
-    <!-- 
-      注意：请勿随意修改或删除 "Powered by Astro & Firefly" 部分，这是对开源项目的尊重和支持。
-      如果您需要在底部增加内容，请在src/config/footerConfig.ts中修改enable属性为true，然后编辑src/config/FooterConfig.html文件。
-      您可以随意在src/config/FooterConfig.html中随意添加自定义内容，不需要修改Footer.astro文件。
-    -->
-  </div>
-</div>
+		<div class="footer-meta">
+			<span>&copy; <span id="copyright-year">{currentYear}</span> {profileConfig.name}</span>
+			<span class="footer-separator" aria-hidden="true">·</span>
+			<span>All Rights Reserved.</span>
+		</div>
+
+		<div class="footer-credit">
+			<span>Powered by</span>
+			<a class="footer-link" target="_blank" rel="noopener noreferrer" href="https://astro.build">Astro</a>
+			<span aria-hidden="true">&amp;</span>
+			<a class="footer-link" target="_blank" rel="noopener noreferrer" href="https://github.com/CuteLeaf/Firefly">Firefly</a>
+		</div>
+	</div>
+</footer>
+
+<style>
+	.site-footer {
+		color: color-mix(in oklch, currentColor 72%, transparent);
+	}
+
+	.footer-divider {
+		padding-inline: 2rem;
+	}
+
+	.footer-divider-line {
+		display: block;
+		height: 1px;
+		background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--primary) 22%, transparent) 18%, color-mix(in oklch, var(--primary) 22%, transparent) 82%, transparent);
+	}
+
+	.footer-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		padding-top: 1.25rem;
+		text-align: center;
+		font-size: 0.875rem;
+	}
+
+	.footer-meta,
+	.footer-credit {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		line-height: 1.6;
+	}
+
+	.footer-meta {
+		color: color-mix(in oklch, currentColor 78%, transparent);
+		font-size: 0.86rem;
+	}
+
+	.footer-credit {
+		color: color-mix(in oklch, currentColor 58%, transparent);
+		font-size: 0.78rem;
+	}
+
+	.footer-separator {
+		color: color-mix(in oklch, currentColor 35%, transparent);
+	}
+
+	.footer-link {
+		color: var(--primary);
+		font-weight: 600;
+		text-underline-offset: 0.2em;
+		transition: color 180ms ease, opacity 180ms ease;
+	}
+
+	.footer-link:hover {
+		color: color-mix(in oklch, var(--primary) 72%, currentColor);
+		text-decoration: underline;
+	}
+
+	.footer-custom {
+		max-width: 100%;
+	}
+
+	@media (max-width: 480px) {
+		.site-footer {
+			padding-inline: 1.25rem;
+		}
+
+		.footer-content {
+			gap: 0.6rem;
+			padding-top: 1rem;
+		}
+
+		.footer-divider {
+			padding-inline: 0.5rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.footer-link {
+			transition: none;
+		}
+	}
+</style>

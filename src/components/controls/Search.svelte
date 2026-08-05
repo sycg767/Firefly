@@ -5,8 +5,9 @@ import { navigateToPage } from "@utils/navigation-utils";
 import { onMount } from "svelte";
 import Icon from "@/components/common/Icon.svelte";
 import type { SearchResult } from "@/global";
+import { searchDevPosts } from "@/utils/dev-search";
 import { FLOATING_PANEL_CLOSE_EVENT } from "@/utils/floating-panel-utils";
-import { url as formatUrl, getSearchUrl } from "@/utils/url-utils";
+import { getSearchUrl } from "@/utils/url-utils";
 
 // --- State ---
 let keywordDesktop = "";
@@ -16,21 +17,6 @@ let isSearching = false;
 let initialized = false;
 let debounceTimer: NodeJS.Timeout;
 let searchRequestId = 0;
-
-// --- Mocks for Dev Mode ---
-const fakeResult: SearchResult[] = [
-	{
-		url: formatUrl("/"),
-		meta: { title: "This Is a Fake Search Result" },
-		excerpt:
-			"Because Pagefind cannot work in the <mark>dev</mark> environment.",
-	},
-	{
-		url: formatUrl("/"),
-		meta: { title: "If You Want to Test the Search" },
-		excerpt: "Try running <mark>npm build && npm preview</mark> instead.",
-	},
-];
 
 // --- UI Logic ---
 const togglePanel = () => {
@@ -106,7 +92,7 @@ const search = async (keyword: string, isDesktop: boolean): Promise<void> => {
 					response.results.map((item) => item.data()),
 				);
 			} else if (import.meta.env.DEV) {
-				searchResults = fakeResult;
+				searchResults = await searchDevPosts(keyword);
 			}
 
 			if (requestId !== searchRequestId) return;
@@ -136,7 +122,6 @@ onMount(() => {
 	};
 
 	if (import.meta.env.DEV) {
-		console.log("Pagefind mock enabled in development mode.");
 		initializePagefind();
 	} else {
 		if (window.pagefind) {

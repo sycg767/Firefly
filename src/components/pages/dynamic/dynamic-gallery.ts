@@ -1,10 +1,35 @@
-import * as FancyboxModule from "@fancyapps/ui";
-
 type GalleryImage = {
 	alt: string;
 	element: HTMLImageElement;
 	src: string;
 };
+
+type FancyboxApi = typeof import("@fancyapps/ui").Fancybox;
+
+let fancyboxPromise: Promise<FancyboxApi> | null = null;
+
+function loadFancybox(): Promise<FancyboxApi> {
+	if (!fancyboxPromise) {
+		fancyboxPromise = import("@fancyapps/ui").then((module) => module.Fancybox);
+	}
+	return fancyboxPromise;
+}
+
+async function showLightbox(images: GalleryImage[], startIndex: number) {
+	try {
+		const Fancybox = await loadFancybox();
+		Fancybox.show(
+			images.map((image) => ({
+				src: image.src,
+				type: "image",
+				caption: image.alt,
+			})),
+			{ startIndex },
+		);
+	} catch (error) {
+		console.error("动态图片查看器加载失败", error);
+	}
+}
 
 export function registerDynamicGallery(): void {
 	if (customElements.get("dynamic-gallery")) return;
@@ -126,17 +151,7 @@ export function registerDynamicGallery(): void {
 				"click",
 				(event) => {
 					event.preventDefault();
-					const Fancybox = FancyboxModule.Fancybox;
-					Fancybox.show(
-						this.images.map((image) => ({
-							src: image.src,
-							type: "image",
-							caption: image.alt,
-						})),
-						{
-							startIndex: this.activeIndex,
-						},
-					);
+					void showLightbox(this.images, this.activeIndex);
 				},
 			);
 		}
@@ -159,15 +174,7 @@ export function registerDynamicGallery(): void {
 		}
 
 		private openLightbox(index: number) {
-			const Fancybox = FancyboxModule.Fancybox;
-			Fancybox.show(
-				this.images.map((image) => ({
-					src: image.src,
-					type: "image",
-					caption: image.alt,
-				})),
-				{ startIndex: index },
-			);
+			void showLightbox(this.images, index);
 		}
 
 		private select(index: number) {

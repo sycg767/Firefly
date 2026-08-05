@@ -33,6 +33,7 @@ const processedLinks = Astro.props.links;
                     <div id={`mobile-submenu-${index}`} class="mobile-submenu" data-mobile-submenu inert aria-hidden="true">
                         {link.children.map((child) => (
                             <a href={child.external ? child.url : url(child.url)}
+                               data-no-swup={child.pageKey === "dynamic" ? true : undefined}
                                class="group flex justify-between items-center py-2 pl-6 pr-1 rounded-lg gap-8
                                    hover:bg-(--btn-plain-bg-hover) active:bg-(--btn-plain-bg-active) transition"
                                target={child.external ? "_blank" : null}
@@ -50,7 +51,9 @@ const processedLinks = Astro.props.links;
                 </div>
             ) : (
                 /* 普通链接项目 */
-                <a href={link.external ? link.url : url(link.url)} class="group flex justify-between items-center py-2 pl-3 pr-1 rounded-lg gap-8
+                <a href={link.external ? link.url : url(link.url)}
+                   data-no-swup={link.pageKey === "dynamic" ? true : undefined}
+                   class="group flex justify-between items-center py-2 pl-3 pr-1 rounded-lg gap-8
                     hover:bg-(--btn-plain-bg-hover) active:bg-(--btn-plain-bg-active) transition
                 "
                    target={link.external ? "_blank" : null}

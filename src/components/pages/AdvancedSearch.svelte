@@ -4,19 +4,20 @@ import { i18n } from "@i18n/translation";
 import { onMount } from "svelte";
 import Icon from "@/components/common/Icon.svelte";
 import type { SearchResult } from "@/global";
-import { url as formatUrl } from "@/utils/url-utils";
+import { searchDevPosts } from "@/utils/dev-search";
 
-// --- Props ---
+// 属性
 export let title = i18n(I18nKey.search);
 export let description = "";
 
-// --- State ---
+// 搜索状态
 let keyword = "";
 let results: SearchResult[] = [];
 let isSearching = false;
 let initialized = false;
+let debounceTimer: NodeJS.Timeout;
+let searchRequestId = 0;
 
-// 在客户端获取 URL 参数
 const getInitialKeyword = (): string => {
 	if (typeof window !== "undefined") {
 		const searchParams = new URLSearchParams(window.location.search);
@@ -25,85 +26,65 @@ const getInitialKeyword = (): string => {
 	return "";
 };
 
-// --- Mocks for Dev Mode ---
-const fakeResult: SearchResult[] = [
-	{
-		url: formatUrl("/"),
-		meta: { title: "Dev Mode Search Result 1" },
-		excerpt: "This is a <mark>mock</mark> result for development.",
-	},
-	{
-		url: formatUrl("/"),
-		meta: { title: "Dev Mode Search Result 2" },
-		excerpt: "Pagefind only works in <mark>production</mark> build.",
-	},
-];
-
-// --- Core Search Logic ---
-const search = async () => {
+const search = async (): Promise<void> => {
 	if (!initialized || !keyword.trim()) {
 		results = [];
 		return;
 	}
+
+	const requestId = ++searchRequestId;
 	isSearching = true;
 
 	try {
+		let searchResults: SearchResult[] = [];
+
 		if (import.meta.env.PROD && window.pagefind) {
 			const response = await window.pagefind.search(keyword);
-			const rawResults = await Promise.all(
+			searchResults = await Promise.all(
 				response.results.map((item) => item.data()),
 			);
-			results = rawResults;
 		} else if (import.meta.env.DEV) {
-			// 开发模式下的模拟结果
-			results = fakeResult.filter(
-				(item) =>
-					item.excerpt.toLowerCase().includes(keyword.toLowerCase()) ||
-					item.meta.title.toLowerCase().includes(keyword.toLowerCase()),
-			);
+			searchResults = await searchDevPosts(keyword);
+		}
+
+		if (requestId === searchRequestId) {
+			results = searchResults;
 		}
 	} catch (error) {
-		console.error("Search error:", error);
-		results = [];
+		if (requestId === searchRequestId) {
+			console.error("Search error:", error);
+			results = [];
+		}
 	} finally {
-		isSearching = false;
+		if (requestId === searchRequestId) {
+			isSearching = false;
+		}
 	}
 };
 
-// --- Initialization onMount ---
 onMount(() => {
-	const initialize = async () => {
-		initialized = true;
+		const initialize = async () => {
+			initialized = true;
+			const initialKeyword = getInitialKeyword();
+			if (initialKeyword) keyword = initialKeyword;
+			if (keyword.trim()) await search();
+		};
 
-		// 从 URL 获取初始关键词
-		const initialKeyword = getInitialKeyword();
-		if (initialKeyword) {
-			keyword = initialKeyword;
-		}
-
-		// 如果有关键词，自动执行搜索
-		if (keyword.trim()) {
-			await search();
-		}
-	};
-
-	// 开发环境直接初始化
-	if (import.meta.env.DEV) {
-		initialize();
-	} else {
-		// 生产环境等待 Pagefind 加载
-		if (window.pagefind) {
+		if (import.meta.env.DEV) {
+			initialize();
+		} else if (window.pagefind) {
 			initialize();
 		} else {
-			document.addEventListener("pagefindready", initialize, {
-				once: true,
-			});
+			document.addEventListener("pagefindready", initialize, { once: true });
 		}
-	}
-});
 
-let debounceTimer: NodeJS.Timeout;
-const handleInput = () => {
+		return () => {
+			document.removeEventListener("pagefindready", initialize);
+			clearTimeout(debounceTimer);
+		};
+	});
+
+const handleInput = (): void => {
 	clearTimeout(debounceTimer);
 	debounceTimer = setTimeout(() => {
 		search();
@@ -112,7 +93,6 @@ const handleInput = () => {
 </script>
 
 <div class="card-base px-6 py-6 md:px-9 md:py-6 mb-4 rounded-(--radius-large)">
-    <!-- Title Section -->
     <div class="mb-4">
         <div class="flex items-center gap-3 mb-3">
             <div class="h-8 w-8 rounded-lg bg-(--primary) flex items-center justify-center text-white dark:text-black/70">
@@ -129,7 +109,6 @@ const handleInput = () => {
         {/if}
     </div>
 
-    <!-- Search Bar -->
     <div class="relative flex">
         <div class="relative flex-1">
             <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -147,7 +126,6 @@ const handleInput = () => {
 </div>
 
 <div class="grid grid-cols-1 gap-4">
-    <!-- Results Area -->
     <div>
         {#if isSearching}
             <div class="flex justify-center py-10">
@@ -173,7 +151,7 @@ const handleInput = () => {
                 {i18n(I18nKey.searchNoResults)}
             </div>
         {:else}
-             <div class="card-base p-10 text-center text-50 rounded-(--radius-large)">
+            <div class="card-base p-10 text-center text-50 rounded-(--radius-large)">
                 {i18n(I18nKey.searchTypeSomething)}
             </div>
         {/if}
@@ -181,7 +159,6 @@ const handleInput = () => {
 </div>
 
 <style>
-    /* 关键字高亮效果 - 主题色 */
     :global(mark) {
         background: transparent;
         color: var(--primary);

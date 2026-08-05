@@ -3,8 +3,11 @@
   "type": "module",
   "version": "6.15.6",
   "scripts": {
-    "dev": "astro dev",
+    "dev": "astro dev --host 127.0.0.1",
     "start": "astro dev",
+    "admin": "node scripts/admin-server.mjs",
+    "admin:dev": "vite --config admin/vite.config.ts",
+    "admin:build": "vite build --config admin/vite.config.ts",
     "check": "astro check",
     "build": "npx tsx scripts/generate-lqips.ts && astro build && npx tsx scripts/subset-fonts.ts && pagefind --site dist",
     "preview": "astro preview",
@@ -90,6 +93,7 @@
     "@biomejs/biome": "2.5.5",
     "@iconify-json/mdi": "^1.2.3",
     "@iconify-json/svg-spinners": "^1.2.4",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@tailwindcss/vite": "^4.3.3",
     "@types/qrcode": "^1.5.6",
     "@types/sanitize-html": "^2.16.1",
@@ -97,7 +101,8 @@
     "postcss-import": "^16.1.1",
     "postcss-nesting": "^14.0.1",
     "rehype-callouts": "^2.2.0",
-    "subset-font": "^2.5.0"
+    "subset-font": "^2.5.0",
+    "vite": "^7.3.6"
   },
   "packageManager": "pnpm@9.14.4"
 }

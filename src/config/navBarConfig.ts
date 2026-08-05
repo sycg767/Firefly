@@ -131,7 +131,7 @@ const getDynamicNavBarConfig = (): NavBarConfig => {
 
 // 导航搜索配置
 export const navBarSearchConfig: NavBarSearchConfig = {
-	method: NavBarSearchMethod.PageFind,
+	"method": 0
 };
 
 // ============================================================================
@@ -214,4 +214,127 @@ export const LinkPresets: Record<string, NavBarLink> = {
 	},
 };
 
-export const navBarConfig: NavBarConfig = getDynamicNavBarConfig();
+export const navBarConfig: NavBarConfig = {
+	"links": [
+		{
+			"name": "主页",
+			"url": "/",
+			"icon": "material-symbols:home"
+		},
+		{
+			"name": "文章",
+			"url": "#",
+			"icon": "material-symbols:article",
+			"children": [
+				{
+					"name": "归档",
+					"url": "/archive/",
+					"icon": "material-symbols:archive"
+				},
+				{
+					"name": "分类",
+					"url": "/categories/",
+					"icon": "material-symbols:folder-open-rounded"
+				},
+				{
+					"name": "标签",
+					"url": "/tags/",
+					"icon": "material-symbols:tag-rounded"
+				}
+			]
+		},
+		{
+			"name": "社交",
+			"url": "#",
+			"icon": "material-symbols:group",
+			"children": [
+				{
+					"name": "友链",
+					"url": "/friends/",
+					"icon": "material-symbols:link-2-rounded",
+					"pageKey": "friends"
+				},
+				{
+					"name": "留言",
+					"url": "/guestbook/",
+					"icon": "material-symbols:chat",
+					"pageKey": "guestbook"
+				}
+			]
+		},
+		{
+			"name": "我的",
+			"url": "#",
+			"icon": "material-symbols:person",
+			"children": [
+				{
+					"name": "动态",
+					"url": "/dynamic/",
+					"icon": "material-symbols:forum-rounded",
+					"pageKey": "dynamic"
+				},
+				{
+					"name": "相册",
+					"url": "/gallery/",
+					"icon": "material-symbols:photo-library",
+					"pageKey": "gallery"
+				},
+				{
+					"name": "追番",
+					"url": "/anime/",
+					"icon": "material-symbols:live-tv",
+					"pageKey": "anime"
+				},
+				{
+					"name": "番组计划",
+					"url": "/bangumi/",
+					"icon": "material-symbols:movie",
+					"pageKey": "bangumi"
+				},
+				{
+					"name": "书签导航",
+					"url": "/booknav/",
+					"icon": "material-symbols:bookmarks",
+					"pageKey": "booknav"
+				}
+			]
+		},
+		{
+			"name": "关于",
+			"url": "#",
+			"icon": "material-symbols:info",
+			"children": [
+				{
+					"name": "打赏",
+					"url": "/sponsor/",
+					"icon": "material-symbols:favorite",
+					"pageKey": "sponsor"
+				},
+				{
+					"name": "关于我",
+					"url": "/about/",
+					"icon": "material-symbols:person"
+				}
+			]
+		},
+		{
+			"name": "链接",
+			"url": "#",
+			"icon": "material-symbols:link",
+			"children": [
+				{
+					"name": "GitHub",
+					"url": "https://github.com/sycg767",
+					"external": true,
+					"icon": "fa7-brands:github"
+				},
+				{
+					"name": "Kaggle",
+					"url": "https://www.kaggle.com/aurax7",
+					"external": true,
+					"icon": "fa7-brands:kaggle"
+				}
+			]
+		}
+	]
+};
