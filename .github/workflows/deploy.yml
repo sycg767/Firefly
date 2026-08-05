@@ -76,8 +76,8 @@ jobs:
           test -n "$SERVER_PATH" || { echo "Missing SERVER_PATH"; exit 1; }
           test -d dist || { echo "The dist build output does not exist"; exit 1; }
 
-          SSH_OPTIONS="-i $HOME/.ssh/deploy_key -p $SERVER_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-          ssh $SSH_OPTIONS "$SERVER_USER@$SERVER_HOST" "test -d '$SERVER_PATH'"
+          SSH_OPTIONS="-i $HOME/.ssh/deploy_key -p $SERVER_PORT -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+          ssh $SSH_OPTIONS "$SERVER_USER@$SERVER_HOST" "command -v rsync >/dev/null 2>&1 || { echo 'Remote rsync is not installed'; exit 1; }; test -d '$SERVER_PATH' || { echo 'Remote deploy directory does not exist'; exit 1; }"
           rsync -az --delete --human-readable --stats \
             -e "ssh $SSH_OPTIONS" \
             dist/ "$SERVER_USER@$SERVER_HOST:${SERVER_PATH%/}/"
