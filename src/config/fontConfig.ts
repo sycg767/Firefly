@@ -28,65 +28,31 @@ import type { FontDefinition, FontSelectionConfig } from "@/types/fontConfig";
 // 本地开发调试的情况下，修改后需要每次重启开发服务器才能生效
 export const fontsList: FontDefinition[] = [
 	{
-		"name": "Zen Maru Gothic",
-		"cssVariable": "--font-zen-maru-gothic",
-		"provider": "fontsource",
-		"weights": [
-			"300",
-			"400",
-			"500",
-			"600",
-			"700"
-		],
-		"styles": [
-			"normal"
-		],
-		"subsets": [
-			"latin",
-			"cyrillic"
-		],
-		"fallbacks": [
-			"sans-serif"
-		]
+		name: "Zen Maru Gothic",
+		cssVariable: "--font-zen-maru-gothic",
+		provider: "fontsource",
+		weights: ["300", "400", "500", "600", "700"],
+		styles: ["normal"],
+		subsets: ["latin", "cyrillic"],
+		fallbacks: ["sans-serif"],
 	},
 	{
-		"name": "Inter",
-		"cssVariable": "--font-inter",
-		"provider": "fontsource",
-		"weights": [
-			"300",
-			"400",
-			"500",
-			"600",
-			"700"
-		],
-		"styles": [
-			"normal"
-		],
-		"subsets": [
-			"latin",
-			"cyrillic"
-		],
-		"fallbacks": [
-			"sans-serif"
-		]
+		name: "Inter",
+		cssVariable: "--font-inter",
+		provider: "fontsource",
+		weights: ["300", "400", "500", "600", "700"],
+		styles: ["normal"],
+		subsets: ["latin", "cyrillic"],
+		fallbacks: ["sans-serif"],
 	},
 	{
-		"name": "JetBrains Mono",
-		"cssVariable": "--font-jetbrains-mono",
-		"provider": "fontsource",
-		"weights": [
-			"400",
-			"700"
-		],
-		"styles": [
-			"normal"
-		],
-		"subsets": [
-			"latin",
-			"cyrillic"
-		],
-		"fallbacks": [
+		name: "JetBrains Mono",
+		cssVariable: "--font-jetbrains-mono",
+		provider: "fontsource",
+		weights: ["400", "700"],
+		styles: ["normal"],
+		subsets: ["latin", "cyrillic"],
+		fallbacks: [
 			"ui-monospace",
 			"SFMono-Regular",
 			"Menlo",
@@ -94,41 +60,35 @@ export const fontsList: FontDefinition[] = [
 			"Consolas",
 			"Liberation Mono",
 			"Courier New",
-			"monospace"
-		]
+			"monospace",
+		],
 	},
 	{
-		"name": "GreatVibes Regular 2",
-		"cssVariable": "--font-greatvibes",
-		"provider": "local",
-		"options": {
-			"variants": [
+		name: "GreatVibes Regular 2",
+		cssVariable: "--font-greatvibes",
+		provider: "local",
+		options: {
+			variants: [
 				{
-					"src": [
-						"./public/assets/fonts/GreatVibes-Regular-2.otf"
-					]
-				}
-			]
+					src: ["./public/assets/fonts/GreatVibes-Regular-2.otf"],
+				},
+			],
 		},
-		"fallbacks": [
-			"sans-serif"
-		]
-	}
+		fallbacks: ["sans-serif"],
+	},
 ];
 
 // ─── 字体选择与区域覆盖 ─────────────────────────────────────
 export const fontConfig: FontSelectionConfig = {
-	"enable": true,
-	"selected": [
-		"system"
-	],
-	"bannerTitleFont": "--font-zen-maru-gothic",
-	"bannerSubtitleFont": "--font-inter",
-	"navbarTitleFont": "",
-	"codeFont": "--font-jetbrains-mono",
-	"subsetFonts": {
+	enable: true,
+	selected: ["system"],
+	bannerTitleFont: "--font-zen-maru-gothic",
+	bannerSubtitleFont: "--font-inter",
+	navbarTitleFont: "",
+	codeFont: "--font-jetbrains-mono",
+	subsetFonts: {
 		"--font-greatvibes": {
-			"extraChars": ""
-		}
-	}
+			extraChars: "",
+		},
+	},
 };

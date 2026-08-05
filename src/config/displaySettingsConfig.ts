@@ -6,19 +6,19 @@ import type { DisplaySettingsConfig } from "../types/displaySettingsConfig";
 // 也方便进行调试预览效果
 
 export const displaySettingsConfig: DisplaySettingsConfig = {
-	"themeColorSwitchable": true,
-	"layoutSwitchable": true,
-	"cardBorderSwitchable": true,
-	"cardFollowThemeSwitchable": true,
-	"wallpaperModeSwitchable": true,
-	"wavesSwitchable": true,
-	"gradientSwitchable": true,
-	"bannerTitleSwitchable": true,
-	"bannerCarouselSwitchable": true,
-	"overlaySwitchable": {
-		"opacity": true,
-		"blur": true,
-		"cardOpacity": true
+	themeColorSwitchable: true,
+	layoutSwitchable: true,
+	cardBorderSwitchable: true,
+	cardFollowThemeSwitchable: true,
+	wallpaperModeSwitchable: true,
+	wavesSwitchable: true,
+	gradientSwitchable: true,
+	bannerTitleSwitchable: true,
+	bannerCarouselSwitchable: true,
+	overlaySwitchable: {
+		opacity: true,
+		blur: true,
+		cardOpacity: true,
 	},
-	"sakuraSwitchable": true
+	sakuraSwitchable: true,
 };

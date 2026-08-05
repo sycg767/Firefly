@@ -18,15 +18,15 @@ import type { CoverImageConfig } from "../types/coverImageConfig";
  * ---
  */
 export const coverImageConfig: CoverImageConfig = {
-	"enableInPost": true,
-	"enableInPostOverlay": true,
-	"showLoading": false,
-	"randomCoverImage": {
-		"enable": false,
-		"apis": [
+	enableInPost: true,
+	enableInPostOverlay: true,
+	showLoading: false,
+	randomCoverImage: {
+		enable: false,
+		apis: [
 			"https://t.alcy.cc/pc",
 			"https://www.dmoe.cc/random.php",
-			"https://uapis.cn/api/v1/random/image?category=acg&type=pc"
-		]
-	}
+			"https://uapis.cn/api/v1/random/image?category=acg&type=pc",
+		],
+	},
 };

@@ -63,26 +63,26 @@ const search = async (): Promise<void> => {
 };
 
 onMount(() => {
-		const initialize = async () => {
-			initialized = true;
-			const initialKeyword = getInitialKeyword();
-			if (initialKeyword) keyword = initialKeyword;
-			if (keyword.trim()) await search();
-		};
+	const initialize = async () => {
+		initialized = true;
+		const initialKeyword = getInitialKeyword();
+		if (initialKeyword) keyword = initialKeyword;
+		if (keyword.trim()) await search();
+	};
 
-		if (import.meta.env.DEV) {
-			initialize();
-		} else if (window.pagefind) {
-			initialize();
-		} else {
-			document.addEventListener("pagefindready", initialize, { once: true });
-		}
+	if (import.meta.env.DEV) {
+		initialize();
+	} else if (window.pagefind) {
+		initialize();
+	} else {
+		document.addEventListener("pagefindready", initialize, { once: true });
+	}
 
-		return () => {
-			document.removeEventListener("pagefindready", initialize);
-			clearTimeout(debounceTimer);
-		};
-	});
+	return () => {
+		document.removeEventListener("pagefindready", initialize);
+		clearTimeout(debounceTimer);
+	};
+});
 
 const handleInput = (): void => {
 	clearTimeout(debounceTimer);

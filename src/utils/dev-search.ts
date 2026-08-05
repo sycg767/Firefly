@@ -44,14 +44,18 @@ const escapeHtml = (value: string): string =>
 		.replace(/"/g, "&quot;")
 		.replace(/'/g, "&#039;");
 
-const getQueryTerms = (query: string): string[] =>
-	[...new Set(query.toLocaleLowerCase().split(/\s+/).filter(Boolean))];
+const getQueryTerms = (query: string): string[] => [
+	...new Set(query.toLocaleLowerCase().split(/\s+/).filter(Boolean)),
+];
 
 const highlight = (value: string, terms: string[]): string => {
 	if (!value || terms.length === 0) return escapeHtml(value);
 
 	const pattern = new RegExp(
-		terms.sort((a, b) => b.length - a.length).map(escapeRegExp).join("|"),
+		terms
+			.sort((a, b) => b.length - a.length)
+			.map(escapeRegExp)
+			.join("|"),
 		"gi",
 	);
 	let highlighted = "";
@@ -103,14 +107,12 @@ const scoreDocument = (
 	return terms.reduce(
 		(score, term) =>
 			score +
-				fields.reduce(
-					(fieldScore, field) =>
-						fieldScore +
-						(field.value.toLocaleLowerCase().includes(term)
-							? field.weight
-							: 0),
-					0,
-				),
+			fields.reduce(
+				(fieldScore, field) =>
+					fieldScore +
+					(field.value.toLocaleLowerCase().includes(term) ? field.weight : 0),
+				0,
+			),
 		0,
 	);
 };

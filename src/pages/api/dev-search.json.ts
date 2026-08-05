@@ -1,5 +1,5 @@
-import type { DevSearchDocument } from "@/utils/dev-search";
 import { getSortedPosts } from "@/utils/content-utils";
+import type { DevSearchDocument } from "@/utils/dev-search";
 import { getPostUrlBySlug } from "@/utils/url-utils";
 
 export const prerender = true;
