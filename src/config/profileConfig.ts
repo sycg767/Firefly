@@ -2,8 +2,8 @@ import type { ProfileConfig } from "../types/profileConfig";
 
 export const profileConfig: ProfileConfig = {
 	avatar: "assets/images/avatar.jpg",
-	name: "Aurax",
-	bio: "Hello, I'm Aurax.",
+	name: "Yaxon",
+	bio: "Hello, I'm Yaxon.",
 	links: [
 		{
 			name: "GitHub",
