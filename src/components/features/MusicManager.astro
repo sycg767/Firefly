@@ -35,6 +35,7 @@ const managerConfigStr = JSON.stringify({
 	volume: config.volume ?? 0.7,
 	playMode: config.playMode ?? "list",
 	showLyrics: config.showLyrics ?? true,
+	fetchLocalLyrics: config.local?.fetchLyrics ?? true,
 	i18n: {
 		noPlaying: i18n(I18nKey.musicNoPlaying),
 		lyrics: i18n(I18nKey.musicLyrics),
@@ -171,34 +172,138 @@ const managerConfigStr = JSON.stringify({
     }
 
     // ── Lyrics ───────────────────────────────────────────────
-    function loadLyrics(track) {
+    function normalizeSearchText(value) {
+        return String(value || '')
+            .toLowerCase()
+            .normalize('NFKC')
+            .replace(/\([^)]*\)|\[[^\]]*\]|（[^）]*）|【[^】]*】/g, '')
+            .replace(/[^\p{L}\p{N}]+/gu, '');
+    }
+
+    function scoreMetingResult(item, track) {
+        var trackTitle = normalizeSearchText(track.name);
+        var trackArtist = normalizeSearchText(track.artist);
+        var itemTitle = normalizeSearchText(item.title || item.name);
+        var itemArtist = normalizeSearchText(item.author || item.artist);
+        var score = item.lrc ? 1 : 0;
+
+        if (itemTitle === trackTitle) score += 100;
+        else if (itemTitle.includes(trackTitle) || trackTitle.includes(itemTitle)) score += 60;
+
+        if (itemArtist === trackArtist) score += 40;
+        else if (itemArtist && trackArtist && (itemArtist.includes(trackArtist) || trackArtist.includes(itemArtist))) score += 20;
+
+        return score;
+    }
+
+    async function fetchMetingLyrics(track) {
+        if (!config.fetchLocalLyrics || !config.meting) return null;
+
+        var m = config.meting;
+        var apis = [m.api].concat(m.fallbackApis || []);
+        var query = encodeURIComponent((track.name || '') + ' ' + (track.artist || ''));
+        var lastError = null;
+
+        for (var i = 0; i < apis.length; i++) {
+            var baseApi = apis[i];
+            if (!baseApi) continue;
+
+            try {
+                var searchUrl = baseApi
+                    .replace(':server', m.server || 'netease')
+                    .replace(':type', 'search')
+                    .replace(':id', query)
+                    .replace(':r', Math.random().toString());
+                var searchResponse = await fetch(searchUrl);
+                if (!searchResponse.ok) throw new Error('HTTP ' + searchResponse.status);
+
+                var results = await searchResponse.json();
+                if (!Array.isArray(results) || results.length === 0) continue;
+
+                results.sort(function (a, b) {
+                    return scoreMetingResult(b, track) - scoreMetingResult(a, track);
+                });
+
+                for (var j = 0; j < results.length; j++) {
+                    if (scoreMetingResult(results[j], track) < 60) continue;
+
+                    var lyricUrl = results[j] && results[j].lrc;
+                    if (!lyricUrl) continue;
+
+                    var lyricResponse = await fetch(lyricUrl);
+                    if (!lyricResponse.ok) continue;
+
+                    var lyricText = await lyricResponse.text();
+                    if (parseLRC(lyricText).length > 0) return lyricText;
+                }
+            } catch (error) {
+                lastError = error;
+                console.warn('Meting lyrics search failed for ' + (track.name || 'unknown'), error);
+            }
+        }
+
+        if (lastError) throw lastError;
+        return null;
+    }
+
+    async function loadLyrics(track, ver) {
         state.lyrics = [];
         state.currentLrcIndex = -1;
 
-        if (!track.lrc) {
+        if (track.lrc) {
+            var isLrcUrl = /^(https?:)?\/\//.test(track.lrc)
+                || track.lrc.startsWith('/')
+                || /\.(lrc|txt)(\?|#|$)/i.test(track.lrc);
+
+            if (isLrcUrl) {
+                emit('fm:lyrics', { lyrics: [], status: 'loading' });
+                try {
+                    var localResponse = await fetch(track.lrc);
+                    if (!localResponse.ok) throw new Error('HTTP ' + localResponse.status);
+                    var localText = await localResponse.text();
+                    if (ver !== loadVersion) return;
+
+                    state.lyrics = parseLRC(localText);
+                    emit('fm:lyrics', {
+                        lyrics: state.lyrics,
+                        status: state.lyrics.length > 0 ? 'loaded' : 'none'
+                    });
+                } catch (error) {
+                    if (ver !== loadVersion) return;
+                    state.lyrics = [];
+                    emit('fm:lyrics', { lyrics: [], status: 'failed' });
+                }
+                return;
+            }
+
+            if (ver !== loadVersion) return;
+            state.lyrics = parseLRC(track.lrc);
+            emit('fm:lyrics', {
+                lyrics: state.lyrics,
+                status: state.lyrics.length > 0 ? 'loaded' : 'none'
+            });
+            return;
+        }
+
+        if (!config.fetchLocalLyrics || !config.meting) {
             emit('fm:lyrics', { lyrics: [], status: 'none' });
             return;
         }
 
-        var isLrcUrl = /^(https?:)?\/\//.test(track.lrc)
-            || track.lrc.startsWith('/')
-            || /\.(lrc|txt)(\?|#|$)/i.test(track.lrc);
+        emit('fm:lyrics', { lyrics: [], status: 'loading' });
+        try {
+            var remoteText = await fetchMetingLyrics(track);
+            if (ver !== loadVersion) return;
 
-        if (isLrcUrl) {
-            emit('fm:lyrics', { lyrics: [], status: 'loading' });
-            fetch(track.lrc)
-                .then(function (r) { return r.text(); })
-                .then(function (text) {
-                    state.lyrics = parseLRC(text);
-                    emit('fm:lyrics', { lyrics: state.lyrics, status: 'loaded' });
-                })
-                .catch(function () {
-                    state.lyrics = [];
-                    emit('fm:lyrics', { lyrics: [], status: 'failed' });
-                });
-        } else {
-            state.lyrics = parseLRC(track.lrc);
-            emit('fm:lyrics', { lyrics: state.lyrics, status: state.lyrics.length > 0 ? 'loaded' : 'none' });
+            state.lyrics = remoteText ? parseLRC(remoteText) : [];
+            emit('fm:lyrics', {
+                lyrics: state.lyrics,
+                status: state.lyrics.length > 0 ? 'loaded' : 'none'
+            });
+        } catch (error) {
+            if (ver !== loadVersion) return;
+            state.lyrics = [];
+            emit('fm:lyrics', { lyrics: [], status: 'failed' });
         }
     }
 
@@ -257,7 +362,7 @@ const managerConfigStr = JSON.stringify({
             });
         }
 
-        loadLyrics(track);
+        loadLyrics(track, ver);
 
         emit('fm:track', { index: index, track: track, autoPlay: !!autoPlay });
 

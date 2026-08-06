@@ -41,6 +41,9 @@ export type MusicPlayerConfig = {
 
 	// 本地音乐配置（当 mode 为 'local' 时使用）
 	local?: {
+		// 本地歌曲没有歌词时，是否通过 Meting 搜索接口获取歌词
+		fetchLyrics?: boolean;
+
 		playlist?: Array<{
 			name: string; // 歌曲名称
 			artist: string; // 艺术家

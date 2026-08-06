@@ -46,6 +46,9 @@ export const musicPlayerConfig: MusicPlayerConfig = {
 	// 2. 或者直接填入歌词字符串内容
 	// lrc: "[00:00.00]歌词内容...",
 	local: {
+		// 本地歌曲没有 lrc 时，通过现有 Meting 接口搜索真实歌词
+		fetchLyrics: true,
+
 		playlist: [
 			{
 				name: "无法回到过去 (男声版)",
