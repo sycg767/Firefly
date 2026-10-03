@@ -46,6 +46,9 @@ const bannerTitleFontVar = fontConfig.enable
 const bannerSubtitleFontVar = fontConfig.enable
 	? fontConfig.bannerSubtitleFont || ""
 	: "";
+const ambientHomeFontVar = fontConfig.enable
+	? fontConfig.ambientHomeFont || ""
+	: "";
 const navbarTitleFontVar = fontConfig.enable
 	? fontConfig.navbarTitleFont || ""
 	: "";
@@ -60,12 +63,13 @@ const navbarTitleFontVar = fontConfig.enable
 ))}
 
 <!-- 区域字体 CSS 变量 + body 字体 -->
-{fontConfig.enable && (bannerTitleFontVar || bannerSubtitleFontVar || navbarTitleFontVar || selectedFontVars.length > 0) && (
+{fontConfig.enable && (bannerTitleFontVar || bannerSubtitleFontVar || ambientHomeFontVar || navbarTitleFontVar || selectedFontVars.length > 0) && (
   <style
     set:html={`
-    ${bannerTitleFontVar || bannerSubtitleFontVar || navbarTitleFontVar ? `:root {
+    ${bannerTitleFontVar || bannerSubtitleFontVar || ambientHomeFontVar || navbarTitleFontVar ? `:root {
       ${bannerTitleFontVar ? `--font-banner-title: var(${bannerTitleFontVar}, inherit);` : ""}
       ${bannerSubtitleFontVar ? `--font-banner-subtitle: var(${bannerSubtitleFontVar}, inherit);` : ""}
+      ${ambientHomeFontVar ? `--font-ambient-home: var(${ambientHomeFontVar}, serif);` : ""}
       ${navbarTitleFontVar ? `--font-navbar-title: var(${navbarTitleFontVar}, inherit);` : ""}
     }` : ""}
 

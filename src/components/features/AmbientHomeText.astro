@@ -1,0 +1,221 @@
+---
+interface Props {
+	quotes: string | string[];
+	rotationInterval?: number;
+}
+
+const { quotes, rotationInterval = 9000 } = Astro.props;
+const normalizedQuotes = Array.isArray(quotes) ? quotes : [quotes];
+---
+
+<section
+	class="ambient-home-text"
+	data-ambient-home-text
+	data-quotes={JSON.stringify(normalizedQuotes)}
+	data-rotation-interval={rotationInterval}
+	aria-label="首页随笔"
+>
+	<div class="ambient-quote-frame">
+		<p class="ambient-quote" data-ambient-quote>{normalizedQuotes[0]}</p>
+	</div>
+</section>
+
+<script>
+	class AmbientHomeText {
+		private root: HTMLElement;
+		private quote: HTMLElement | null;
+		private transitionTarget: HTMLElement | null;
+		private quotes: string[];
+		private quoteIndex = 0;
+		private rotationInterval: number;
+		private quoteTimer: number | null = null;
+		private transitionTimer: number | null = null;
+		private hovered = false;
+		private reduceMotion = window.matchMedia(
+			"(prefers-reduced-motion: reduce)",
+		).matches;
+
+		constructor(root: HTMLElement) {
+			this.root = root;
+			this.quote = root.querySelector("[data-ambient-quote]");
+			this.transitionTarget = root.querySelector(".ambient-quote-frame");
+			this.quotes = this.parseQuotes(root.dataset.quotes);
+			this.rotationInterval = Math.max(
+				4000,
+				Number(root.dataset.rotationInterval) || 9000,
+			);
+
+			this.quoteIndex = Math.floor(Math.random() * this.quotes.length);
+			if (this.quote) this.quote.textContent = this.quotes[this.quoteIndex] || "";
+			this.root.addEventListener("mouseenter", this.handleMouseEnter);
+			this.root.addEventListener("mouseleave", this.handleMouseLeave);
+			document.addEventListener("visibilitychange", this.handleVisibilityChange);
+			this.syncQuoteTimer();
+		}
+
+		private parseQuotes(value?: string): string[] {
+			if (!value) return [""];
+			try {
+				const parsed = JSON.parse(value);
+				return Array.isArray(parsed) && parsed.length > 0 ? parsed : [value];
+			} catch {
+				return [value];
+			}
+		}
+
+		private rotateQuote() {
+			if (!this.quote || this.quotes.length < 2) return;
+			let nextIndex = this.quoteIndex;
+			while (nextIndex === this.quoteIndex) {
+				nextIndex = Math.floor(Math.random() * this.quotes.length);
+			}
+
+			this.transitionTarget?.classList.add("is-leaving");
+			this.transitionTimer = window.setTimeout(() => {
+				if (!this.quote) return;
+				this.quoteIndex = nextIndex;
+				this.quote.textContent = this.quotes[this.quoteIndex] || "";
+				this.transitionTarget?.classList.remove("is-leaving");
+				this.transitionTarget?.classList.add("is-entering");
+				requestAnimationFrame(() => {
+					requestAnimationFrame(() =>
+						this.transitionTarget?.classList.remove("is-entering"),
+					);
+				});
+			}, 600);
+		}
+
+		private clearQuoteTimer() {
+			if (this.quoteTimer !== null) {
+				window.clearInterval(this.quoteTimer);
+				this.quoteTimer = null;
+			}
+		}
+
+		private syncQuoteTimer() {
+			this.clearQuoteTimer();
+			if (
+				this.reduceMotion ||
+				this.hovered ||
+				document.hidden ||
+				this.quotes.length < 2
+			) {
+				return;
+			}
+			this.quoteTimer = window.setInterval(
+				() => this.rotateQuote(),
+				this.rotationInterval,
+			);
+		}
+
+		private handleMouseEnter = () => {
+			this.hovered = true;
+			this.syncQuoteTimer();
+		};
+
+		private handleMouseLeave = () => {
+			this.hovered = false;
+			this.syncQuoteTimer();
+		};
+
+		private handleVisibilityChange = () => this.syncQuoteTimer();
+
+		destroy() {
+			this.clearQuoteTimer();
+			if (this.transitionTimer !== null) window.clearTimeout(this.transitionTimer);
+			this.root.removeEventListener("mouseenter", this.handleMouseEnter);
+			this.root.removeEventListener("mouseleave", this.handleMouseLeave);
+			document.removeEventListener(
+				"visibilitychange",
+				this.handleVisibilityChange,
+			);
+		}
+	}
+
+	interface AmbientElement extends HTMLElement {
+		__ambientHomeText?: AmbientHomeText;
+	}
+
+	function initAmbientHomeText() {
+		document
+			.querySelectorAll<AmbientElement>("[data-ambient-home-text]")
+			.forEach((element) => {
+				element.__ambientHomeText?.destroy();
+				element.__ambientHomeText = new AmbientHomeText(element);
+			});
+	}
+
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", initAmbientHomeText, {
+			once: true,
+		});
+	} else {
+		initAmbientHomeText();
+	}
+
+	document.addEventListener("swup:contentReplaced", initAmbientHomeText);
+	document.addEventListener("swup:content:replace", initAmbientHomeText);
+	document.addEventListener("swup:page:view", initAmbientHomeText);
+</script>
+
+<style>
+	.ambient-home-text {
+		display: flex;
+		width: min(82vw, 52rem);
+		min-height: 13rem;
+		align-items: center;
+		justify-content: center;
+		flex-direction: column;
+		color: white;
+		text-align: center;
+		text-shadow: 0 2px 18px rgb(3 12 24 / 52%);
+	}
+
+	.ambient-quote-frame {
+		position: relative;
+		width: min(100%, 42rem);
+		padding: 1.25rem 3.25rem 2.25rem;
+		transition:
+			opacity 600ms ease,
+			filter 600ms ease;
+	}
+
+	.ambient-quote {
+		min-height: 3.4em;
+		margin: 0;
+		font-family: var(--font-ambient-home, "STKaiti", "KaiTi", serif);
+		font-size: clamp(1.4rem, 2.5vw, 2.15rem);
+		font-weight: 500;
+		letter-spacing: 0.08em;
+		line-height: 1.7;
+		white-space: pre-line;
+	}
+
+	.ambient-quote-frame.is-leaving,
+	.ambient-quote-frame.is-entering {
+		opacity: 0;
+		filter: blur(6px);
+	}
+
+	@media (max-width: 640px) {
+		.ambient-home-text {
+			width: 88vw;
+			min-height: 10rem;
+		}
+
+		.ambient-quote-frame {
+			padding: 1rem 2rem 2rem;
+		}
+
+		.ambient-quote {
+			font-size: clamp(1.2rem, 5.8vw, 1.65rem);
+			letter-spacing: 0.06em;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.ambient-quote-frame {
+			transition: none;
+		}
+	}
+</style>

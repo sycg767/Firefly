@@ -15,10 +15,12 @@ export type BackgroundWallpaperConfig = {
 		playerMode?: "order" | "random"; // 多视频播放模式："order" 顺序循环（默认），"random" 随机切换
 		homeText?: {
 			enable: boolean; // 是否在首页显示自定义文字（全局开关）
+			displayMode?: "classic" | "ambient"; // classic 为标题/副标题，ambient 为轮播短句
 			title?: string; // 主标题
 			subtitle?: string | string[]; // 副标题，支持单个字符串或字符串数组
 			titleSize?: string; // 主标题字体大小，如 "3.5rem"
 			subtitleSize?: string; // 副标题字体大小，如 "1.5rem"
+			rotationInterval?: number; // ambient 模式的短句轮播间隔，单位毫秒
 			typewriter?: {
 				enable: boolean; // 是否启用打字机效果
 				speed: number; // 打字速度（毫秒）

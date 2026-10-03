@@ -46,6 +46,23 @@ export const fontsList: FontDefinition[] = [
 		fallbacks: ["sans-serif"],
 	},
 	{
+		// 首页短句专用轻量子集；修改短句内容时需同步更新字体子集。
+		name: "LXGW WenKai",
+		cssVariable: "--font-lxgw-wenkai",
+		provider: "local",
+		options: {
+			variants: [
+				{
+					src: ["./public/assets/fonts/LXGWWenKai-Medium-hero.woff2"],
+					weight: "500",
+					style: "normal",
+				},
+			],
+		},
+		fallbacks: ["STKaiti", "KaiTi", "serif"],
+		display: "swap",
+	},
+	{
 		name: "JetBrains Mono",
 		cssVariable: "--font-jetbrains-mono",
 		provider: "fontsource",
@@ -84,6 +101,7 @@ export const fontConfig: FontSelectionConfig = {
 	selected: ["system"],
 	bannerTitleFont: "--font-zen-maru-gothic",
 	bannerSubtitleFont: "--font-inter",
+	ambientHomeFont: "--font-lxgw-wenkai",
 	navbarTitleFont: "",
 	codeFont: "--font-jetbrains-mono",
 	subsetFonts: {
