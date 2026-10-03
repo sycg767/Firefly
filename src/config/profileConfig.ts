@@ -1,7 +1,7 @@
 import type { ProfileConfig } from "../types/profileConfig";
 
 export const profileConfig: ProfileConfig = {
-	avatar: "assets/images/avatar.jpg",
+	avatar: "/assets/images/avatar.gif",
 	name: "Yaxon",
 	bio: "Hello, I'm Yaxon.",
 	links: [
