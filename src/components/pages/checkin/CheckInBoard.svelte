@@ -19,16 +19,30 @@ interface ApiResponse {
 	error?: string;
 }
 
+interface CycleBounds {
+	cycleYear: number;
+	cycleMonth: number; // 0-11, the start month (16th)
+	startDate: Date;
+	endDate: Date;
+	startKey: string;
+	endKey: string;
+	totalDays: number;
+	rangeLabel: string;
+	shortRangeLabel: string;
+}
+
 interface CalendarCell {
 	dateKey: string;
+	month: number; // 1-12
 	day: number;
-	isCurrentMonth: boolean;
+	isInCycle: boolean;
 	isToday: boolean;
 	isWeekend: boolean;
-	isFuture: boolean;
+	isCycleBoundary: boolean;
 }
 
 const LOCAL_STORAGE_KEY = "firefly_checkin_records_v1";
+const CYCLE_START_DAY = 16;
 const QUICK_NOTES = ["正常打卡", "早卡", "外勤", "加班", "补卡"];
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
@@ -40,9 +54,67 @@ function formatDateKey(date: Date): string {
 	return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
+function parseDateKey(dateKey: string): Date {
+	const [y, m, d] = dateKey.split("-").map(Number);
+	return new Date(y, m - 1, d);
+}
+
 function getCurrentTimeHHMM(): string {
 	const now = new Date();
 	return `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+}
+
+function getCycleForDate(date: Date): {
+	cycleYear: number;
+	cycleMonth: number;
+} {
+	if (date.getDate() >= CYCLE_START_DAY) {
+		return { cycleYear: date.getFullYear(), cycleMonth: date.getMonth() };
+	}
+	const prev = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+	return { cycleYear: prev.getFullYear(), cycleMonth: prev.getMonth() };
+}
+
+function getCycleBounds(cycleYear: number, cycleMonth: number): CycleBounds {
+	const startDate = new Date(cycleYear, cycleMonth, CYCLE_START_DAY);
+	const endDate = new Date(cycleYear, cycleMonth + 1, CYCLE_START_DAY - 1);
+	const startKey = formatDateKey(startDate);
+	const endKey = formatDateKey(endDate);
+
+	const startUtc = Date.UTC(
+		startDate.getFullYear(),
+		startDate.getMonth(),
+		startDate.getDate(),
+	);
+	const endUtc = Date.UTC(
+		endDate.getFullYear(),
+		endDate.getMonth(),
+		endDate.getDate(),
+	);
+	const totalDays = Math.round((endUtc - startUtc) / 86400000) + 1;
+
+	const startY = startDate.getFullYear();
+	const startM = startDate.getMonth() + 1;
+	const endY = endDate.getFullYear();
+	const endM = endDate.getMonth() + 1;
+
+	const rangeLabel =
+		startY === endY
+			? `${startY}年${startM}月16日 ~ ${endM}月15日`
+			: `${startY}年${startM}月16日 ~ ${endY}年${endM}月15日`;
+	const shortRangeLabel = `${startM}/16~${endM}/15`;
+
+	return {
+		cycleYear,
+		cycleMonth,
+		startDate,
+		endDate,
+		startKey,
+		endKey,
+		totalDays,
+		rangeLabel,
+		shortRangeLabel,
+	};
 }
 
 function createEmptyStore(): CheckInStore {
@@ -96,39 +168,53 @@ function normalizeStore(raw: unknown): CheckInStore {
 	};
 }
 
-function buildCalendarCells(
-	year: number,
-	monthIndex: number,
+function buildCycleCalendarCells(
+	bounds: CycleBounds,
 	todayKey: string,
 ): CalendarCell[] {
-	const firstDay = new Date(year, monthIndex, 1);
-	const startOffset = (firstDay.getDay() + 6) % 7; // Monday = 0
-	const startDate = new Date(year, monthIndex, 1 - startOffset);
-	const cells: CalendarCell[] = [];
+	// 从周期起始日（16号）所在周的周一开始
+	const startOffset = (bounds.startDate.getDay() + 6) % 7;
+	const gridStart = new Date(
+		bounds.startDate.getFullYear(),
+		bounds.startDate.getMonth(),
+		bounds.startDate.getDate() - startOffset,
+	);
 
-	for (let i = 0; i < 42; i++) {
-		const cellDate = new Date(
-			startDate.getFullYear(),
-			startDate.getMonth(),
-			startDate.getDate() + i,
-		);
-		const dateKey = formatDateKey(cellDate);
-		const dayOfWeek = cellDate.getDay();
+	// 到周期结束日（次月15号）所在周的周日结束
+	const endOffset = (7 - ((bounds.endDate.getDay() + 6) % 7) - 1 + 7) % 7;
+	const gridEnd = new Date(
+		bounds.endDate.getFullYear(),
+		bounds.endDate.getMonth(),
+		bounds.endDate.getDate() + endOffset,
+	);
+
+	const cells: CalendarCell[] = [];
+	const cursor = new Date(
+		gridStart.getFullYear(),
+		gridStart.getMonth(),
+		gridStart.getDate(),
+	);
+
+	while (cursor <= gridEnd) {
+		const dateKey = formatDateKey(cursor);
+		const dayOfWeek = cursor.getDay();
+		const day = cursor.getDate();
+		const isInCycle = dateKey >= bounds.startKey && dateKey <= bounds.endKey;
 		cells.push({
 			dateKey,
-			day: cellDate.getDate(),
-			isCurrentMonth:
-				cellDate.getFullYear() === year && cellDate.getMonth() === monthIndex,
+			month: cursor.getMonth() + 1,
+			day,
+			isInCycle,
 			isToday: dateKey === todayKey,
 			isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-			isFuture: dateKey > todayKey,
+			isCycleBoundary:
+				dateKey === bounds.startKey ||
+				dateKey === bounds.endKey ||
+				(isInCycle && day === 1),
 		});
+		cursor.setDate(cursor.getDate() + 1);
 	}
 
-	// Trim trailing all-next-month row if month fits cleanly in 5 rows
-	if (cells.slice(35).every((c) => !c.isCurrentMonth)) {
-		return cells.slice(0, 35);
-	}
 	return cells;
 }
 
@@ -136,8 +222,7 @@ function computeCurrentStreak(
 	records: Record<string, CheckInEntry>,
 	todayKey: string,
 ): number {
-	const [y, m, d] = todayKey.split("-").map(Number);
-	const cursor = new Date(y, m - 1, d);
+	const cursor = parseDateKey(todayKey);
 	if (!records[todayKey]) {
 		cursor.setDate(cursor.getDate() - 1);
 	}
@@ -151,11 +236,11 @@ function computeCurrentStreak(
 
 const now = new Date();
 const todayKey = formatDateKey(now);
-const currentYearMonth = todayKey.slice(0, 7);
+const currentCycle = getCycleForDate(now);
 
 let store = $state<CheckInStore>(createEmptyStore());
-let viewYear = $state(now.getFullYear());
-let viewMonth = $state(now.getMonth()); // 0-11
+let viewCycleYear = $state(currentCycle.cycleYear);
+let viewCycleMonth = $state(currentCycle.cycleMonth); // 0-11（周期起始月份，即16号所在月）
 let selectedDateKey = $state(todayKey);
 let noteDraft = $state("");
 let tapToToggle = $state(true);
@@ -167,29 +252,37 @@ let errorMessage = $state("");
 let localExtraCount = $state(0);
 let fileInputEl = $state<HTMLInputElement | null>(null);
 
-const viewMonthPrefix = $derived(`${viewYear}-${pad2(viewMonth + 1)}`);
-const isViewingCurrentMonth = $derived(viewMonthPrefix === currentYearMonth);
-const calendarCells = $derived(
-	buildCalendarCells(viewYear, viewMonth, todayKey),
+const cycleBounds = $derived(getCycleBounds(viewCycleYear, viewCycleMonth));
+const isViewingCurrentCycle = $derived(
+	viewCycleYear === currentCycle.cycleYear &&
+		viewCycleMonth === currentCycle.cycleMonth,
 );
+const calendarCells = $derived(buildCycleCalendarCells(cycleBounds, todayKey));
 
-const monthCheckIns = $derived(
-	Object.keys(store.records).filter((key) =>
-		key.startsWith(`${viewMonthPrefix}-`),
+const cycleCheckIns = $derived(
+	Object.keys(store.records).filter(
+		(key) => key >= cycleBounds.startKey && key <= cycleBounds.endKey,
 	),
 );
-const monthCount = $derived(monthCheckIns.length);
-const remainingToTarget = $derived(Math.max(0, store.targetDays - monthCount));
+const cycleCount = $derived(cycleCheckIns.length);
+const remainingToTarget = $derived(Math.max(0, store.targetDays - cycleCount));
 const progressPercent = $derived(
-	Math.min(100, Math.round((monthCount / Math.max(1, store.targetDays)) * 100)),
+	Math.min(100, Math.round((cycleCount / Math.max(1, store.targetDays)) * 100)),
 );
-const isMonthGoalMet = $derived(monthCount >= store.targetDays);
+const isCycleGoalMet = $derived(cycleCount >= store.targetDays);
 
-const daysLeftInCurrentMonth = $derived.by(() => {
-	if (!isViewingCurrentMonth) return 0;
-	const totalDays = new Date(viewYear, viewMonth + 1, 0).getDate();
-	const todayDay = now.getDate();
-	const remainingAfterToday = totalDays - todayDay;
+const daysLeftInCurrentCycle = $derived.by(() => {
+	if (!isViewingCurrentCycle) return 0;
+	const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+	const endUtc = Date.UTC(
+		cycleBounds.endDate.getFullYear(),
+		cycleBounds.endDate.getMonth(),
+		cycleBounds.endDate.getDate(),
+	);
+	const remainingAfterToday = Math.max(
+		0,
+		Math.round((endUtc - todayUtc) / 86400000),
+	);
 	return store.records[todayKey]
 		? remainingAfterToday
 		: remainingAfterToday + 1;
@@ -197,31 +290,38 @@ const daysLeftInCurrentMonth = $derived.by(() => {
 
 const currentStreak = $derived(computeCurrentStreak(store.records, todayKey));
 
-const yearlySummary = $derived.by(() => {
-	const months: Array<{
-		monthIndex: number;
-		label: string;
+const yearlyCyclesSummary = $derived.by(() => {
+	const list: Array<{
+		cycleMonth: number;
+		title: string;
+		shortRange: string;
 		count: number;
 		met: boolean;
 		isCurrent: boolean;
 	}> = [];
+
 	for (let m = 0; m < 12; m++) {
-		const prefix = `${viewYear}-${pad2(m + 1)}-`;
-		const count = Object.keys(store.records).filter((k) =>
-			k.startsWith(prefix),
+		const b = getCycleBounds(viewCycleYear, m);
+		const count = Object.keys(store.records).filter(
+			(k) => k >= b.startKey && k <= b.endKey,
 		).length;
-		months.push({
-			monthIndex: m,
-			label: `${m + 1}月`,
+		list.push({
+			cycleMonth: m,
+			title: `${m + 1}月期`,
+			shortRange: b.shortRangeLabel,
 			count,
 			met: count >= store.targetDays,
-			isCurrent: `${viewYear}-${pad2(m + 1)}` === currentYearMonth,
+			isCurrent:
+				viewCycleYear === currentCycle.cycleYear &&
+				m === currentCycle.cycleMonth,
 		});
 	}
-	return months;
+	return list;
 });
 
-const yearMetMonthsCount = $derived(yearlySummary.filter((m) => m.met).length);
+const yearMetCyclesCount = $derived(
+	yearlyCyclesSummary.filter((c) => c.met).length,
+);
 
 const todayRecord = $derived(store.records[todayKey]);
 const selectedRecord = $derived(store.records[selectedDateKey]);
@@ -332,8 +432,8 @@ async function handleCheckInToday(): Promise<void> {
 	const time = getCurrentTimeHHMM();
 	const note = noteDraft.trim() || undefined;
 	selectedDateKey = todayKey;
-	viewYear = now.getFullYear();
-	viewMonth = now.getMonth();
+	viewCycleYear = currentCycle.cycleYear;
+	viewCycleMonth = currentCycle.cycleMonth;
 
 	await mutateStore(
 		{ action: "upsert", date: todayKey, checkedAt: time, note },
@@ -421,10 +521,10 @@ function handleCellClick(cell: CalendarCell): void {
 	selectedDateKey = cell.dateKey;
 	noteDraft = store.records[cell.dateKey]?.note || "";
 
-	if (!cell.isCurrentMonth) {
-		const [y, m] = cell.dateKey.split("-").map(Number);
-		viewYear = y;
-		viewMonth = m - 1;
+	if (!cell.isInCycle) {
+		const targetCycle = getCycleForDate(parseDateKey(cell.dateKey));
+		viewCycleYear = targetCycle.cycleYear;
+		viewCycleMonth = targetCycle.cycleMonth;
 	}
 
 	if (tapToToggle) {
@@ -445,7 +545,7 @@ async function handleTargetChange(event: Event): Promise<void> {
 			targetDays: parsed,
 			updatedAt: new Date().toISOString(),
 		}),
-		`月度目标已更新为 ${parsed} 天`,
+		`每周期目标已更新为 ${parsed} 天`,
 	);
 }
 
@@ -463,15 +563,15 @@ async function syncLocalToCloud(): Promise<void> {
 	localExtraCount = 0;
 }
 
-function switchMonth(delta: number): void {
-	const target = new Date(viewYear, viewMonth + delta, 1);
-	viewYear = target.getFullYear();
-	viewMonth = target.getMonth();
+function switchCycle(delta: number): void {
+	const target = new Date(viewCycleYear, viewCycleMonth + delta, 1);
+	viewCycleYear = target.getFullYear();
+	viewCycleMonth = target.getMonth();
 }
 
-function jumpToToday(): void {
-	viewYear = now.getFullYear();
-	viewMonth = now.getMonth();
+function jumpToCurrentCycle(): void {
+	viewCycleYear = currentCycle.cycleYear;
+	viewCycleMonth = currentCycle.cycleMonth;
 	selectedDateKey = todayKey;
 	noteDraft = store.records[todayKey]?.note || "";
 }
@@ -551,8 +651,11 @@ onMount(() => {
 		</div>
 
 		<div class="flex flex-wrap items-center gap-3 text-sm">
+			<span class="rounded-md bg-(--btn-regular-bg) px-2 py-0.5 text-xs text-neutral-600 dark:text-neutral-300">
+				周期：16日 ~ 次月15日
+			</span>
 			<label class="inline-flex items-center gap-1.5 text-neutral-600 dark:text-neutral-300">
-				<span>每月目标</span>
+				<span>每周期目标</span>
 				<input
 					type="number"
 					min="1"
@@ -588,14 +691,14 @@ onMount(() => {
 	<!-- 核心进度卡片 + 今日一键打卡 -->
 	<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
 		<div class="lg:col-span-7 rounded-2xl border border-(--line-divider) bg-(--card-bg) p-5 flex flex-col justify-between gap-4">
-			<div class="flex items-start justify-between gap-3">
+			<div class="flex items-start justify-between gap-3 flex-wrap">
 				<div>
 					<div class="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-						{viewYear} 年 {viewMonth + 1} 月打卡进度
+						打卡周期：{cycleBounds.rangeLabel}（共 {cycleBounds.totalDays} 天）
 					</div>
 					<div class="mt-1 flex items-baseline gap-2">
 						<span class="text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-							{monthCount}
+							{cycleCount}
 						</span>
 						<span class="text-lg font-medium text-neutral-500 dark:text-neutral-400">
 							/ {store.targetDays} 天
@@ -603,17 +706,17 @@ onMount(() => {
 					</div>
 				</div>
 
-				{#if isMonthGoalMet}
+				{#if isCycleGoalMet}
 					<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-						本月已达标 🎉{monthCount > store.targetDays ? `（+${monthCount - store.targetDays}天）` : ""}
+						本周期已达标 🎉{cycleCount > store.targetDays ? `（+${cycleCount - store.targetDays}天）` : ""}
 					</span>
-				{:else if isViewingCurrentMonth && remainingToTarget > daysLeftInCurrentMonth}
+				{:else if isViewingCurrentCycle && remainingToTarget > daysLeftInCurrentCycle}
 					<span class="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400">
-						还差 {remainingToTarget} 天 · 本月仅剩 {daysLeftInCurrentMonth} 天
+						还差 {remainingToTarget} 天 · 本周期仅剩 {daysLeftInCurrentCycle} 天
 					</span>
-				{:else if isViewingCurrentMonth}
+				{:else if isViewingCurrentCycle}
 					<span class="inline-flex items-center gap-1 rounded-full bg-(--primary)/15 px-3 py-1 text-xs font-semibold text-(--primary)">
-						还差 {remainingToTarget} 天 · 本月余 {daysLeftInCurrentMonth} 天
+						还差 {remainingToTarget} 天 · 本周期余 {daysLeftInCurrentCycle} 天
 					</span>
 				{:else}
 					<span class="inline-flex items-center gap-1 rounded-full bg-neutral-500/15 px-3 py-1 text-xs font-semibold text-neutral-600 dark:text-neutral-400">
@@ -626,14 +729,14 @@ onMount(() => {
 				<div class="h-3.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
 					<div
 						class={`h-full rounded-full transition-all duration-500 ${
-							isMonthGoalMet ? "bg-emerald-500" : "bg-(--primary)"
+							isCycleGoalMet ? "bg-emerald-500" : "bg-(--primary)"
 						}`}
 						style={`width: ${progressPercent}%`}
 					></div>
 				</div>
 				<div class="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
 					<span>完成度 {progressPercent}%</span>
-					<span>连续打卡 {currentStreak} 天 · {viewYear} 年已达标 {yearMetMonthsCount}/12 个月</span>
+					<span>连续打卡 {currentStreak} 天 · {viewCycleYear} 年已达标 {yearMetCyclesCount}/12 期</span>
 				</div>
 			</div>
 		</div>
@@ -705,36 +808,36 @@ onMount(() => {
 		</div>
 	</div>
 
-	<!-- 月度交互日历 -->
+	<!-- 周期交互日历（16日 ~ 次月15日） -->
 	<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-4 sm:p-5">
 		<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
-					onclick={() => switchMonth(-1)}
-					aria-label="上个月"
+					onclick={() => switchCycle(-1)}
+					aria-label="上个周期"
 					class="h-8 w-8 rounded-lg border border-(--line-divider) flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:border-(--primary) hover:text-(--primary) transition cursor-pointer"
 				>
 					‹
 				</button>
-				<div class="min-w-28 text-center text-base font-bold text-neutral-900 dark:text-neutral-100">
-					{viewYear} 年 {viewMonth + 1} 月
+				<div class="text-center text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100 px-1">
+					{cycleBounds.rangeLabel}
 				</div>
 				<button
 					type="button"
-					onclick={() => switchMonth(1)}
-					aria-label="下个月"
+					onclick={() => switchCycle(1)}
+					aria-label="下个周期"
 					class="h-8 w-8 rounded-lg border border-(--line-divider) flex items-center justify-center text-neutral-700 dark:text-neutral-200 hover:border-(--primary) hover:text-(--primary) transition cursor-pointer"
 				>
 					›
 				</button>
-				{#if !isViewingCurrentMonth}
+				{#if !isViewingCurrentCycle}
 					<button
 						type="button"
-						onclick={jumpToToday}
+						onclick={jumpToCurrentCycle}
 						class="ml-1 rounded-lg bg-(--btn-regular-bg) px-2.5 py-1 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:text-(--primary) transition cursor-pointer"
 					>
-						回到本月
+						回到当前周期
 					</button>
 				{/if}
 			</div>
@@ -772,7 +875,7 @@ onMount(() => {
 			{/each}
 		</div>
 
-		<!-- 日历格子 -->
+		<!-- 周期日历格子 -->
 		<div class="grid grid-cols-7 gap-1.5 sm:gap-2">
 			{#each calendarCells as cell}
 				{@const entry = store.records[cell.dateKey]}
@@ -781,9 +884,9 @@ onMount(() => {
 					type="button"
 					onclick={() => handleCellClick(cell)}
 					class={`relative min-h-14 sm:min-h-16 rounded-xl p-1.5 sm:p-2 flex flex-col items-start justify-between text-left transition cursor-pointer border ${
-						entry
+						entry && cell.isInCycle
 							? "bg-(--primary)/16 border-(--primary)/50 text-neutral-900 dark:text-neutral-100 hover:bg-(--primary)/24"
-							: cell.isCurrentMonth
+							: cell.isInCycle
 								? cell.isWeekend
 									? "bg-neutral-100/60 dark:bg-neutral-800/35 border-(--line-divider) text-neutral-500 dark:text-neutral-400 hover:border-(--primary)/40"
 									: "bg-transparent border-(--line-divider) text-neutral-800 dark:text-neutral-200 hover:border-(--primary)/40"
@@ -794,10 +897,18 @@ onMount(() => {
 				>
 					<div class="w-full flex items-center justify-between gap-1">
 						<span class={`text-xs sm:text-sm font-semibold ${cell.isToday ? "text-(--primary)" : ""}`}>
-							{cell.day}
+							{#if cell.isCycleBoundary}
+								{cell.month}/{cell.day}
+							{:else}
+								{cell.day}
+							{/if}
 						</span>
 						{#if entry}
-							<span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-(--primary) text-[10px] font-bold text-white dark:text-black/80">
+							<span class={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
+								cell.isInCycle
+									? "bg-(--primary) text-white dark:text-black/80"
+									: "bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
+							}`}>
 								✓
 							</span>
 						{/if}
@@ -809,6 +920,10 @@ onMount(() => {
 						</div>
 					{:else if cell.isToday}
 						<div class="text-[10px] font-medium text-(--primary)">今天</div>
+					{:else if cell.dateKey === cycleBounds.startKey}
+						<div class="text-[10px] text-neutral-400">周期起</div>
+					{:else if cell.dateKey === cycleBounds.endKey}
+						<div class="text-[10px] text-neutral-400">周期止</div>
 					{/if}
 				</button>
 			{/each}
@@ -859,21 +974,21 @@ onMount(() => {
 		</div>
 	</div>
 
-	<!-- 全年 12 个月达标概览 -->
+	<!-- 全年 12 个周期达标概览 -->
 	<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-4 sm:p-5">
-		<div class="flex items-center justify-between mb-3">
+		<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
 			<h3 class="text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100">
-				{viewYear} 年各月达标统计（目标 ≥ {store.targetDays} 天）
+				{viewCycleYear} 年各周期达标统计（目标 ≥ {store.targetDays} 天）
 			</h3>
-			<span class="text-xs text-neutral-500 dark:text-neutral-400">点击月份可快速跳转</span>
+			<span class="text-xs text-neutral-500 dark:text-neutral-400">按每月 16 日 ~ 次月 15 日统计 · 点击快速跳转</span>
 		</div>
-		<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-			{#each yearlySummary as item}
+		<div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+			{#each yearlyCyclesSummary as item}
 				<button
 					type="button"
-					onclick={() => (viewMonth = item.monthIndex)}
+					onclick={() => (viewCycleMonth = item.cycleMonth)}
 					class={`rounded-xl border p-2.5 text-left transition cursor-pointer ${
-						item.monthIndex === viewMonth
+						item.cycleMonth === viewCycleMonth
 							? "border-(--primary) bg-(--primary)/10"
 							: item.met
 								? "border-emerald-500/35 bg-emerald-500/8 hover:border-emerald-500/60"
@@ -882,14 +997,15 @@ onMount(() => {
 				>
 					<div class="flex items-center justify-between text-xs">
 						<span class="font-semibold text-neutral-800 dark:text-neutral-200">
-							{item.label}
+							{item.title}
 						</span>
 						{#if item.met}
 							<span class="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
 						{:else if item.isCurrent}
-							<span class="text-[10px] text-(--primary)">本月</span>
+							<span class="text-[10px] text-(--primary)">当前</span>
 						{/if}
 					</div>
+					<div class="text-[10px] text-neutral-400 mt-0.5">{item.shortRange}</div>
 					<div class="mt-1 text-sm font-bold text-neutral-900 dark:text-neutral-100">
 						{item.count}
 						<span class="text-[11px] font-normal text-neutral-500">/ {store.targetDays}</span>

@@ -212,6 +212,11 @@ export const LinkPresets: Record<string, NavBarLink> = {
 		icon: "material-symbols:bookmarks",
 		pageKey: "booknav",
 	},
+	Checkin: {
+		name: "打卡",
+		url: "/checkin/",
+		icon: "material-symbols:calendar-month",
+	},
 };
 
 export const navBarConfig: NavBarConfig = {
@@ -298,6 +303,11 @@ export const navBarConfig: NavBarConfig = {
 					pageKey: "booknav",
 				},
 			],
+		},
+		{
+			name: "打卡",
+			url: "/checkin/",
+			icon: "material-symbols:calendar-month",
 		},
 		{
 			name: "关于",
