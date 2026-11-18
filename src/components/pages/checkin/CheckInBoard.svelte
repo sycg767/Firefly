@@ -21,19 +21,18 @@ interface ApiResponse {
 
 interface CycleBounds {
 	cycleYear: number;
-	cycleMonth: number; // 0-11, the start month (16th)
+	cycleMonth: number;
 	startDate: Date;
 	endDate: Date;
 	startKey: string;
 	endKey: string;
-	totalDays: number;
 	rangeLabel: string;
 	shortRangeLabel: string;
 }
 
 interface CalendarCell {
 	dateKey: string;
-	month: number; // 1-12
+	month: number;
 	day: number;
 	isInCycle: boolean;
 	isToday: boolean;
@@ -43,7 +42,7 @@ interface CalendarCell {
 
 const LOCAL_STORAGE_KEY = "firefly_checkin_records_v1";
 const CYCLE_START_DAY = 16;
-const QUICK_NOTES = ["正常打卡", "早卡", "外勤", "加班", "补卡"];
+const TARGET_DAYS = 18;
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 
 function pad2(n: number): string {
@@ -81,18 +80,6 @@ function getCycleBounds(cycleYear: number, cycleMonth: number): CycleBounds {
 	const startKey = formatDateKey(startDate);
 	const endKey = formatDateKey(endDate);
 
-	const startUtc = Date.UTC(
-		startDate.getFullYear(),
-		startDate.getMonth(),
-		startDate.getDate(),
-	);
-	const endUtc = Date.UTC(
-		endDate.getFullYear(),
-		endDate.getMonth(),
-		endDate.getDate(),
-	);
-	const totalDays = Math.round((endUtc - startUtc) / 86400000) + 1;
-
 	const startY = startDate.getFullYear();
 	const startM = startDate.getMonth() + 1;
 	const endY = endDate.getFullYear();
@@ -111,7 +98,6 @@ function getCycleBounds(cycleYear: number, cycleMonth: number): CycleBounds {
 		endDate,
 		startKey,
 		endKey,
-		totalDays,
 		rangeLabel,
 		shortRangeLabel,
 	};
@@ -119,7 +105,7 @@ function getCycleBounds(cycleYear: number, cycleMonth: number): CycleBounds {
 
 function createEmptyStore(): CheckInStore {
 	return {
-		targetDays: 18,
+		targetDays: TARGET_DAYS,
 		records: {},
 		updatedAt: new Date().toISOString(),
 	};
@@ -131,7 +117,7 @@ function normalizeStore(raw: unknown): CheckInStore {
 	const targetNum = Number(obj.targetDays);
 	const targetDays = Number.isFinite(targetNum)
 		? Math.min(31, Math.max(1, Math.round(targetNum)))
-		: 18;
+		: TARGET_DAYS;
 
 	const records: Record<string, CheckInEntry> = {};
 	if (obj.records && typeof obj.records === "object") {
@@ -172,7 +158,6 @@ function buildCycleCalendarCells(
 	bounds: CycleBounds,
 	todayKey: string,
 ): CalendarCell[] {
-	// 从周期起始日（16号）所在周的周一开始
 	const startOffset = (bounds.startDate.getDay() + 6) % 7;
 	const gridStart = new Date(
 		bounds.startDate.getFullYear(),
@@ -180,7 +165,6 @@ function buildCycleCalendarCells(
 		bounds.startDate.getDate() - startOffset,
 	);
 
-	// 到周期结束日（次月15号）所在周的周日结束
 	const endOffset = (7 - ((bounds.endDate.getDay() + 6) % 7) - 1 + 7) % 7;
 	const gridEnd = new Date(
 		bounds.endDate.getFullYear(),
@@ -218,39 +202,18 @@ function buildCycleCalendarCells(
 	return cells;
 }
 
-function computeCurrentStreak(
-	records: Record<string, CheckInEntry>,
-	todayKey: string,
-): number {
-	const cursor = parseDateKey(todayKey);
-	if (!records[todayKey]) {
-		cursor.setDate(cursor.getDate() - 1);
-	}
-	let streak = 0;
-	while (records[formatDateKey(cursor)]) {
-		streak += 1;
-		cursor.setDate(cursor.getDate() - 1);
-	}
-	return streak;
-}
-
 const now = new Date();
 const todayKey = formatDateKey(now);
 const currentCycle = getCycleForDate(now);
 
 let store = $state<CheckInStore>(createEmptyStore());
 let viewCycleYear = $state(currentCycle.cycleYear);
-let viewCycleMonth = $state(currentCycle.cycleMonth); // 0-11（周期起始月份，即16号所在月）
-let selectedDateKey = $state(todayKey);
-let noteDraft = $state("");
-let tapToToggle = $state(true);
-
+let viewCycleMonth = $state(currentCycle.cycleMonth);
 let syncMode = $state<"loading" | "cloud" | "local">("loading");
 let isSaving = $state(false);
-let statusMessage = $state("");
 let errorMessage = $state("");
+let showHistory = $state(false);
 let localExtraCount = $state(0);
-let fileInputEl = $state<HTMLInputElement | null>(null);
 
 const cycleBounds = $derived(getCycleBounds(viewCycleYear, viewCycleMonth));
 const isViewingCurrentCycle = $derived(
@@ -259,17 +222,17 @@ const isViewingCurrentCycle = $derived(
 );
 const calendarCells = $derived(buildCycleCalendarCells(cycleBounds, todayKey));
 
-const cycleCheckIns = $derived(
+const cycleCount = $derived(
 	Object.keys(store.records).filter(
 		(key) => key >= cycleBounds.startKey && key <= cycleBounds.endKey,
-	),
+	).length,
 );
-const cycleCount = $derived(cycleCheckIns.length);
-const remainingToTarget = $derived(Math.max(0, store.targetDays - cycleCount));
+const targetDays = $derived(store.targetDays || TARGET_DAYS);
+const remainingToTarget = $derived(Math.max(0, targetDays - cycleCount));
 const progressPercent = $derived(
-	Math.min(100, Math.round((cycleCount / Math.max(1, store.targetDays)) * 100)),
+	Math.min(100, Math.round((cycleCount / Math.max(1, targetDays)) * 100)),
 );
-const isCycleGoalMet = $derived(cycleCount >= store.targetDays);
+const isCycleGoalMet = $derived(cycleCount >= targetDays);
 
 const daysLeftInCurrentCycle = $derived.by(() => {
 	if (!isViewingCurrentCycle) return 0;
@@ -288,8 +251,6 @@ const daysLeftInCurrentCycle = $derived.by(() => {
 		: remainingAfterToday + 1;
 });
 
-const currentStreak = $derived(computeCurrentStreak(store.records, todayKey));
-
 const yearlyCyclesSummary = $derived.by(() => {
 	const list: Array<{
 		cycleMonth: number;
@@ -299,7 +260,6 @@ const yearlyCyclesSummary = $derived.by(() => {
 		met: boolean;
 		isCurrent: boolean;
 	}> = [];
-
 	for (let m = 0; m < 12; m++) {
 		const b = getCycleBounds(viewCycleYear, m);
 		const count = Object.keys(store.records).filter(
@@ -310,7 +270,7 @@ const yearlyCyclesSummary = $derived.by(() => {
 			title: `${m + 1}月期`,
 			shortRange: b.shortRangeLabel,
 			count,
-			met: count >= store.targetDays,
+			met: count >= targetDays,
 			isCurrent:
 				viewCycleYear === currentCycle.cycleYear &&
 				m === currentCycle.cycleMonth,
@@ -319,12 +279,7 @@ const yearlyCyclesSummary = $derived.by(() => {
 	return list;
 });
 
-const yearMetCyclesCount = $derived(
-	yearlyCyclesSummary.filter((c) => c.met).length,
-);
-
 const todayRecord = $derived(store.records[todayKey]);
-const selectedRecord = $derived(store.records[selectedDateKey]);
 
 function readLocalCache(): CheckInStore {
 	try {
@@ -340,28 +295,13 @@ function writeLocalCache(next: CheckInStore): void {
 	try {
 		localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(next));
 	} catch {
-		// 忽略浏览器存储空间或隐私模式限制
+		// 忽略浏览器存储限制
 	}
-}
-
-function showFlash(msg: string, isError = false): void {
-	if (isError) {
-		errorMessage = msg;
-		statusMessage = "";
-	} else {
-		statusMessage = msg;
-		errorMessage = "";
-	}
-	setTimeout(() => {
-		if (isError && errorMessage === msg) errorMessage = "";
-		if (!isError && statusMessage === msg) statusMessage = "";
-	}, 3200);
 }
 
 async function loadInitialData(): Promise<void> {
 	const localData = readLocalCache();
 	store = localData;
-	noteDraft = store.records[selectedDateKey]?.note || "";
 
 	try {
 		const res = await fetch("/api/checkin", { cache: "no-store" });
@@ -376,14 +316,12 @@ async function loadInitialData(): Promise<void> {
 		}
 
 		const cloudStore = normalizeStore(payload.data);
-		const missingInCloud = Object.keys(localData.records).filter(
+		localExtraCount = Object.keys(localData.records).filter(
 			(k) => !cloudStore.records[k],
 		).length;
-		localExtraCount = missingInCloud;
 		store = cloudStore;
 		writeLocalCache(cloudStore);
 		syncMode = "cloud";
-		noteDraft = store.records[selectedDateKey]?.note || "";
 	} catch {
 		syncMode = "local";
 	}
@@ -392,9 +330,9 @@ async function loadInitialData(): Promise<void> {
 async function mutateStore(
 	body: Record<string, unknown>,
 	localUpdater: (prev: CheckInStore) => CheckInStore,
-	successHint: string,
 ): Promise<void> {
 	isSaving = true;
+	errorMessage = "";
 	const optimistic = localUpdater(store);
 	store = optimistic;
 	writeLocalCache(optimistic);
@@ -413,140 +351,49 @@ async function mutateStore(
 			const serverStore = normalizeStore(payload.data);
 			store = serverStore;
 			writeLocalCache(serverStore);
-			showFlash(successHint);
 		} catch (err) {
-			showFlash(
-				err instanceof Error ? `${err.message}（已暂存本地）` : "云端保存失败",
-				true,
-			);
+			errorMessage =
+				err instanceof Error ? `${err.message}（已暂存本地）` : "云端保存失败";
 		} finally {
 			isSaving = false;
 		}
 	} else {
 		isSaving = false;
-		showFlash(successHint);
 	}
 }
 
-async function handleCheckInToday(): Promise<void> {
-	const time = getCurrentTimeHHMM();
-	const note = noteDraft.trim() || undefined;
-	selectedDateKey = todayKey;
-	viewCycleYear = currentCycle.cycleYear;
-	viewCycleMonth = currentCycle.cycleMonth;
-
-	await mutateStore(
-		{ action: "upsert", date: todayKey, checkedAt: time, note },
-		(prev) => {
-			const nextRecords = { ...prev.records };
-			nextRecords[todayKey] = note
-				? { checkedAt: time, note }
-				: { checkedAt: time };
-			return {
-				...prev,
-				records: nextRecords,
-				updatedAt: new Date().toISOString(),
-			};
-		},
-		`今日已打卡（${time}）`,
-	);
-}
-
-async function handleToggleDate(
-	dateKey: string,
-	forceMode?: "upsert" | "remove",
-): Promise<void> {
+async function toggleDate(dateKey: string): Promise<void> {
 	const exists = Boolean(store.records[dateKey]);
-	const action = forceMode || (exists ? "remove" : "upsert");
 	const time = getCurrentTimeHHMM();
 
-	if (action === "remove") {
-		await mutateStore(
-			{ action: "remove", date: dateKey },
-			(prev) => {
-				const nextRecords = { ...prev.records };
-				delete nextRecords[dateKey];
-				return {
-					...prev,
-					records: nextRecords,
-					updatedAt: new Date().toISOString(),
-				};
-			},
-			`已取消 ${dateKey} 的打卡`,
-		);
-		if (selectedDateKey === dateKey) noteDraft = "";
-	} else {
-		const note =
-			selectedDateKey === dateKey && noteDraft.trim()
-				? noteDraft.trim()
-				: store.records[dateKey]?.note;
-		await mutateStore(
-			{ action: "upsert", date: dateKey, checkedAt: time, note },
-			(prev) => {
-				const nextRecords = { ...prev.records };
-				const checkedAt = prev.records[dateKey]?.checkedAt || time;
-				nextRecords[dateKey] = note ? { checkedAt, note } : { checkedAt };
-				return {
-					...prev,
-					records: nextRecords,
-					updatedAt: new Date().toISOString(),
-				};
-			},
-			`已记录 ${dateKey} 打卡`,
-		);
-	}
-}
-
-async function handleSaveNoteForSelected(): Promise<void> {
-	const record = store.records[selectedDateKey];
-	const checkedAt = record?.checkedAt || getCurrentTimeHHMM();
-	const note = noteDraft.trim();
-
 	await mutateStore(
-		{ action: "upsert", date: selectedDateKey, checkedAt, note },
+		exists
+			? { action: "remove", date: dateKey }
+			: { action: "upsert", date: dateKey, checkedAt: time },
 		(prev) => {
 			const nextRecords = { ...prev.records };
-			nextRecords[selectedDateKey] = note ? { checkedAt, note } : { checkedAt };
+			if (exists) {
+				delete nextRecords[dateKey];
+			} else {
+				nextRecords[dateKey] = { checkedAt: time };
+			}
 			return {
 				...prev,
 				records: nextRecords,
 				updatedAt: new Date().toISOString(),
 			};
 		},
-		`已保存 ${selectedDateKey} 备注`,
 	);
 }
 
 function handleCellClick(cell: CalendarCell): void {
-	selectedDateKey = cell.dateKey;
-	noteDraft = store.records[cell.dateKey]?.note || "";
-
 	if (!cell.isInCycle) {
 		const targetCycle = getCycleForDate(parseDateKey(cell.dateKey));
 		viewCycleYear = targetCycle.cycleYear;
 		viewCycleMonth = targetCycle.cycleMonth;
+		return;
 	}
-
-	if (tapToToggle) {
-		void handleToggleDate(cell.dateKey);
-	}
-}
-
-async function handleTargetChange(event: Event): Promise<void> {
-	const input = event.currentTarget as HTMLInputElement;
-	const parsed = Math.min(
-		31,
-		Math.max(1, Math.round(Number(input.value) || 18)),
-	);
-	await mutateStore(
-		{ action: "setTarget", targetDays: parsed },
-		(prev) => ({
-			...prev,
-			targetDays: parsed,
-			updatedAt: new Date().toISOString(),
-		}),
-		`每周期目标已更新为 ${parsed} 天`,
-	);
+	void toggleDate(cell.dateKey);
 }
 
 async function syncLocalToCloud(): Promise<void> {
@@ -558,7 +405,6 @@ async function syncLocalToCloud(): Promise<void> {
 			records: { ...localData.records, ...prev.records },
 			updatedAt: new Date().toISOString(),
 		}),
-		"已将本地记录合并同步到云端",
 	);
 	localExtraCount = 0;
 }
@@ -572,44 +418,6 @@ function switchCycle(delta: number): void {
 function jumpToCurrentCycle(): void {
 	viewCycleYear = currentCycle.cycleYear;
 	viewCycleMonth = currentCycle.cycleMonth;
-	selectedDateKey = todayKey;
-	noteDraft = store.records[todayKey]?.note || "";
-}
-
-function exportJson(): void {
-	const blob = new Blob([JSON.stringify(store, null, 2)], {
-		type: "application/json",
-	});
-	const link = document.createElement("a");
-	link.href = URL.createObjectURL(blob);
-	link.download = `checkin-backup-${todayKey}.json`;
-	link.click();
-	URL.revokeObjectURL(link.href);
-	showFlash("已导出 JSON 备份文件");
-}
-
-async function handleImportFile(event: Event): Promise<void> {
-	const input = event.currentTarget as HTMLInputElement;
-	const file = input.files?.[0];
-	if (!file) return;
-
-	try {
-		const text = await file.text();
-		const parsed = normalizeStore(JSON.parse(text));
-		await mutateStore(
-			{ action: "import", data: parsed, merge: true },
-			(prev) => ({
-				...prev,
-				records: { ...parsed.records, ...prev.records },
-				updatedAt: new Date().toISOString(),
-			}),
-			`已导入并合并 ${Object.keys(parsed.records).length} 条打卡记录`,
-		);
-	} catch {
-		showFlash("JSON 文件格式无效，导入失败", true);
-	} finally {
-		input.value = "";
-	}
 }
 
 onMount(() => {
@@ -617,200 +425,104 @@ onMount(() => {
 });
 </script>
 
-<div class="space-y-6">
-	<!-- 顶部同步状态与目标设置 -->
-	<div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-(--line-divider) bg-(--card-bg) px-4 py-3">
-		<div class="flex flex-wrap items-center gap-2.5 text-sm">
-			{#if syncMode === "loading"}
-				<span class="inline-flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
-					<span class="h-2.5 w-2.5 rounded-full bg-neutral-400 animate-pulse"></span>
-					正在连接同步状态...
-				</span>
-			{:else if syncMode === "cloud"}
-				<span class="inline-flex items-center gap-2 font-medium text-emerald-600 dark:text-emerald-400">
-					<span class="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
-					云端已同步（Vercel Redis）
-				</span>
-			{:else}
-				<span class="inline-flex items-center gap-2 font-medium text-amber-600 dark:text-amber-400">
-					<span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
-					本地存储模式（未检测到云端数据库）
-				</span>
-			{/if}
-
-			{#if localExtraCount > 0 && syncMode === "cloud"}
-				<button
-					type="button"
-					onclick={syncLocalToCloud}
-					disabled={isSaving}
-					class="rounded-lg bg-(--primary)/15 px-2.5 py-1 text-xs font-medium text-(--primary) hover:bg-(--primary)/25 transition cursor-pointer"
-				>
-					发现 {localExtraCount} 条本地记录，点击合并到云端
-				</button>
-			{/if}
-		</div>
-
-		<div class="flex flex-wrap items-center gap-3 text-sm">
-			<span class="rounded-md bg-(--btn-regular-bg) px-2 py-0.5 text-xs text-neutral-600 dark:text-neutral-300">
-				周期：16日 ~ 次月15日
-			</span>
-			<label class="inline-flex items-center gap-1.5 text-neutral-600 dark:text-neutral-300">
-				<span>每周期目标</span>
-				<input
-					type="number"
-					min="1"
-					max="31"
-					value={store.targetDays}
-					onchange={handleTargetChange}
-					class="w-14 rounded-lg border border-(--line-divider) bg-transparent px-2 py-1 text-center font-semibold text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-(--primary)"
-				/>
-				<span>天</span>
-			</label>
-			<button
-				type="button"
-				onclick={() => void loadInitialData()}
-				class="rounded-lg border border-(--line-divider) px-2.5 py-1 text-xs text-neutral-600 dark:text-neutral-300 hover:border-(--primary) hover:text-(--primary) transition cursor-pointer"
-			>
-				刷新同步
-			</button>
-		</div>
-	</div>
-
-	{#if statusMessage || errorMessage}
-		<div
-			class={`rounded-xl px-4 py-2.5 text-sm font-medium border ${
-				errorMessage
-					? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400"
-					: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-			}`}
-		>
-			{errorMessage || statusMessage}
+<div class="space-y-4">
+	{#if errorMessage}
+		<div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-600 dark:text-red-400">
+			{errorMessage}
 		</div>
 	{/if}
 
-	<!-- 核心进度卡片 + 今日一键打卡 -->
-	<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
-		<div class="lg:col-span-7 rounded-2xl border border-(--line-divider) bg-(--card-bg) p-5 flex flex-col justify-between gap-4">
-			<div class="flex items-start justify-between gap-3 flex-wrap">
-				<div>
-					<div class="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-						打卡周期：{cycleBounds.rangeLabel}（共 {cycleBounds.totalDays} 天）
-					</div>
-					<div class="mt-1 flex items-baseline gap-2">
+	<!-- 核心进度 + 今日打卡（一卡搞定） -->
+	<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-5 space-y-4">
+		<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+			<div>
+				<div class="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+					<span>{cycleBounds.rangeLabel}</span>
+					{#if syncMode === "cloud"}
+						<span class="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+							<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+							已同步
+						</span>
+					{:else if syncMode === "local"}
+						<span class="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+							<span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+							本地模式
+						</span>
+					{/if}
+				</div>
+
+				<div class="mt-1 flex items-baseline gap-3 flex-wrap">
+					<div class="flex items-baseline gap-1.5">
 						<span class="text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
 							{cycleCount}
 						</span>
-						<span class="text-lg font-medium text-neutral-500 dark:text-neutral-400">
-							/ {store.targetDays} 天
+						<span class="text-base font-medium text-neutral-500 dark:text-neutral-400">
+							/ {targetDays} 天
 						</span>
 					</div>
-				</div>
 
-				{#if isCycleGoalMet}
-					<span class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-						本周期已达标 🎉{cycleCount > store.targetDays ? `（+${cycleCount - store.targetDays}天）` : ""}
-					</span>
-				{:else if isViewingCurrentCycle && remainingToTarget > daysLeftInCurrentCycle}
-					<span class="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400">
-						还差 {remainingToTarget} 天 · 本周期仅剩 {daysLeftInCurrentCycle} 天
-					</span>
-				{:else if isViewingCurrentCycle}
-					<span class="inline-flex items-center gap-1 rounded-full bg-(--primary)/15 px-3 py-1 text-xs font-semibold text-(--primary)">
-						还差 {remainingToTarget} 天 · 本周期余 {daysLeftInCurrentCycle} 天
-					</span>
-				{:else}
-					<span class="inline-flex items-center gap-1 rounded-full bg-neutral-500/15 px-3 py-1 text-xs font-semibold text-neutral-600 dark:text-neutral-400">
-						差 {remainingToTarget} 天未达标
-					</span>
-				{/if}
+					{#if isCycleGoalMet}
+						<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+							已达标 🎉{cycleCount > targetDays ? ` (+${cycleCount - targetDays}天)` : ""}
+						</span>
+					{:else if isViewingCurrentCycle && remainingToTarget > daysLeftInCurrentCycle}
+						<span class="text-xs font-semibold text-red-500">
+							还差 {remainingToTarget} 天（本周期仅剩 {daysLeftInCurrentCycle} 天）
+						</span>
+					{:else if isViewingCurrentCycle}
+						<span class="text-xs font-medium text-(--primary)">
+							还差 {remainingToTarget} 天 · 本周期余 {daysLeftInCurrentCycle} 天
+						</span>
+					{:else}
+						<span class="text-xs text-neutral-500">
+							差 {remainingToTarget} 天未达标
+						</span>
+					{/if}
+				</div>
 			</div>
 
-			<div>
-				<div class="h-3.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-					<div
-						class={`h-full rounded-full transition-all duration-500 ${
-							isCycleGoalMet ? "bg-emerald-500" : "bg-(--primary)"
-						}`}
-						style={`width: ${progressPercent}%`}
-					></div>
-				</div>
-				<div class="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-					<span>完成度 {progressPercent}%</span>
-					<span>连续打卡 {currentStreak} 天 · {viewCycleYear} 年已达标 {yearMetCyclesCount}/12 期</span>
-				</div>
-			</div>
-		</div>
-
-		<!-- 今日一键打卡区 -->
-		<div class="lg:col-span-5 rounded-2xl border border-(--line-divider) bg-(--card-bg) p-5 flex flex-col justify-between gap-3">
-			<div class="flex items-center justify-between">
-				<div>
-					<div class="text-xs text-neutral-500 dark:text-neutral-400">今天 · {todayKey}</div>
-					<div class="mt-0.5 text-base font-bold text-neutral-900 dark:text-neutral-100">
-						{#if todayRecord}
-							<span class="text-emerald-600 dark:text-emerald-400">今日已打卡 ({todayRecord.checkedAt})</span>
-						{:else}
-							尚未打卡
-						{/if}
-					</div>
-				</div>
+			<button
+				type="button"
+				disabled={isSaving}
+				onclick={() => void toggleDate(todayKey)}
+				class={`shrink-0 rounded-xl px-5 py-3 text-sm font-semibold transition cursor-pointer disabled:opacity-60 ${
+					todayRecord
+						? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/35 hover:bg-emerald-500/25"
+						: "bg-(--primary) text-white dark:text-black/80 hover:opacity-90"
+				}`}
+			>
 				{#if todayRecord}
-					<button
-						type="button"
-						disabled={isSaving}
-						onclick={() => void handleToggleDate(todayKey, "remove")}
-						class="rounded-lg border border-(--line-divider) px-2.5 py-1 text-xs text-neutral-500 hover:border-red-400 hover:text-red-500 transition cursor-pointer"
-					>
-						撤销今日
-					</button>
+					今日已打卡 ✓ ({todayRecord.checkedAt})
+				{:else}
+					今日打卡
 				{/if}
-			</div>
-
-			<div class="flex flex-wrap gap-1.5">
-				{#each QUICK_NOTES as tag}
-					<button
-						type="button"
-						onclick={() => {
-							noteDraft = noteDraft === tag ? "" : tag;
-						}}
-						class={`rounded-md px-2 py-1 text-xs transition cursor-pointer ${
-							noteDraft === tag
-								? "bg-(--primary) text-white dark:text-black/80 font-medium"
-								: "bg-(--btn-regular-bg) text-neutral-600 dark:text-neutral-300 hover:text-(--primary)"
-						}`}
-					>
-						{tag}
-					</button>
-				{/each}
-			</div>
-
-			<div class="flex gap-2">
-				<input
-					type="text"
-					maxlength="80"
-					bind:value={noteDraft}
-					placeholder="可选备注（如：早卡 / 外勤）"
-					class="min-w-0 flex-1 rounded-xl border border-(--line-divider) bg-transparent px-3 py-2 text-sm text-neutral-900 dark:text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:border-(--primary)"
-				/>
-				<button
-					type="button"
-					disabled={isSaving}
-					onclick={handleCheckInToday}
-					class={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition cursor-pointer ${
-						todayRecord
-							? "bg-emerald-500 text-white hover:bg-emerald-600"
-							: "bg-(--primary) text-white dark:text-black/80 hover:opacity-90"
-					} disabled:opacity-60`}
-				>
-					{todayRecord ? "更新今日" : "今日打卡"}
-				</button>
-			</div>
+			</button>
 		</div>
+
+		<div class="h-2.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
+			<div
+				class={`h-full rounded-full transition-all duration-500 ${
+					isCycleGoalMet ? "bg-emerald-500" : "bg-(--primary)"
+				}`}
+				style={`width: ${progressPercent}%`}
+			></div>
+		</div>
+
+		{#if localExtraCount > 0 && syncMode === "cloud"}
+			<button
+				type="button"
+				onclick={syncLocalToCloud}
+				disabled={isSaving}
+				class="rounded-lg bg-(--primary)/15 px-3 py-1.5 text-xs font-medium text-(--primary) hover:bg-(--primary)/25 transition cursor-pointer"
+			>
+				发现 {localExtraCount} 条本地未同步记录，点击合并到云端
+			</button>
+		{/if}
 	</div>
 
-	<!-- 周期交互日历（16日 ~ 次月15日） -->
+	<!-- 周期日历（点击日期直接打卡/取消） -->
 	<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-4 sm:p-5">
-		<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+		<div class="flex items-center justify-between gap-2 mb-4">
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
@@ -820,7 +532,7 @@ onMount(() => {
 				>
 					‹
 				</button>
-				<div class="text-center text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100 px-1">
+				<div class="text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100 px-1">
 					{cycleBounds.rangeLabel}
 				</div>
 				<button
@@ -831,217 +543,98 @@ onMount(() => {
 				>
 					›
 				</button>
+			</div>
+
+			<div class="flex items-center gap-2">
 				{#if !isViewingCurrentCycle}
 					<button
 						type="button"
 						onclick={jumpToCurrentCycle}
-						class="ml-1 rounded-lg bg-(--btn-regular-bg) px-2.5 py-1 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:text-(--primary) transition cursor-pointer"
+						class="rounded-lg bg-(--btn-regular-bg) px-2.5 py-1 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:text-(--primary) transition cursor-pointer"
 					>
-						回到当前周期
+						回本期
 					</button>
+				{:else}
+					<span class="text-xs text-neutral-400">点日期即可补卡/取消</span>
 				{/if}
-			</div>
-
-			<div class="flex items-center gap-1 rounded-lg bg-(--btn-regular-bg) p-1 text-xs">
-				<button
-					type="button"
-					onclick={() => (tapToToggle = true)}
-					class={`rounded-md px-2.5 py-1 transition cursor-pointer ${
-						tapToToggle
-							? "bg-(--primary) text-white dark:text-black/80 font-medium"
-							: "text-neutral-600 dark:text-neutral-300"
-					}`}
-				>
-					点按直接打卡/取消
-				</button>
-				<button
-					type="button"
-					onclick={() => (tapToToggle = false)}
-					class={`rounded-md px-2.5 py-1 transition cursor-pointer ${
-						!tapToToggle
-							? "bg-(--primary) text-white dark:text-black/80 font-medium"
-							: "text-neutral-600 dark:text-neutral-300"
-					}`}
-				>
-					仅选中写备注
-				</button>
 			</div>
 		</div>
 
-		<!-- 星期表头 -->
-		<div class="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2 text-center text-xs font-medium text-neutral-500 dark:text-neutral-400">
-			{#each WEEKDAYS as dayName, idx}
-				<div class={idx >= 5 ? "text-neutral-400 dark:text-neutral-500" : ""}>{dayName}</div>
+		<div class="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2 text-center text-xs font-medium text-neutral-400">
+			{#each WEEKDAYS as dayName}
+				<div>{dayName}</div>
 			{/each}
 		</div>
 
-		<!-- 周期日历格子 -->
 		<div class="grid grid-cols-7 gap-1.5 sm:gap-2">
 			{#each calendarCells as cell}
 				{@const entry = store.records[cell.dateKey]}
-				{@const isSelected = selectedDateKey === cell.dateKey}
 				<button
 					type="button"
 					onclick={() => handleCellClick(cell)}
-					class={`relative min-h-14 sm:min-h-16 rounded-xl p-1.5 sm:p-2 flex flex-col items-start justify-between text-left transition cursor-pointer border ${
+					class={`h-12 sm:h-14 rounded-xl px-1.5 py-1.5 flex flex-col items-center justify-center gap-0.5 transition cursor-pointer border ${
 						entry && cell.isInCycle
-							? "bg-(--primary)/16 border-(--primary)/50 text-neutral-900 dark:text-neutral-100 hover:bg-(--primary)/24"
+							? "bg-(--primary)/18 border-(--primary)/50 text-neutral-900 dark:text-neutral-100 hover:bg-(--primary)/28"
 							: cell.isInCycle
 								? cell.isWeekend
-									? "bg-neutral-100/60 dark:bg-neutral-800/35 border-(--line-divider) text-neutral-500 dark:text-neutral-400 hover:border-(--primary)/40"
+									? "bg-neutral-100/55 dark:bg-neutral-800/30 border-(--line-divider) text-neutral-500 dark:text-neutral-400 hover:border-(--primary)/40"
 									: "bg-transparent border-(--line-divider) text-neutral-800 dark:text-neutral-200 hover:border-(--primary)/40"
 								: "bg-transparent border-transparent text-neutral-300 dark:text-neutral-700 hover:border-(--line-divider)"
-					} ${cell.isToday ? "ring-2 ring-(--primary) ring-offset-1 ring-offset-(--card-bg)" : ""} ${
-						isSelected ? "outline-2 outline-neutral-400/60 dark:outline-neutral-500/60" : ""
-					}`}
+					} ${cell.isToday ? "ring-2 ring-(--primary) ring-offset-1 ring-offset-(--card-bg)" : ""}`}
 				>
-					<div class="w-full flex items-center justify-between gap-1">
-						<span class={`text-xs sm:text-sm font-semibold ${cell.isToday ? "text-(--primary)" : ""}`}>
-							{#if cell.isCycleBoundary}
-								{cell.month}/{cell.day}
-							{:else}
-								{cell.day}
-							{/if}
-						</span>
-						{#if entry}
-							<span class={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
-								cell.isInCycle
-									? "bg-(--primary) text-white dark:text-black/80"
-									: "bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200"
-							}`}>
-								✓
-							</span>
-						{/if}
-					</div>
-
-					{#if entry}
-						<div class="w-full truncate text-[10px] leading-tight text-neutral-600 dark:text-neutral-300">
-							{entry.note || entry.checkedAt}
-						</div>
+					<span class={`text-xs sm:text-sm font-semibold leading-none ${cell.isToday ? "text-(--primary)" : ""}`}>
+						{cell.isCycleBoundary ? `${cell.month}/${cell.day}` : cell.day}
+					</span>
+					{#if entry && cell.isInCycle}
+						<span class="text-[10px] font-bold leading-none text-(--primary)">✓</span>
 					{:else if cell.isToday}
-						<div class="text-[10px] font-medium text-(--primary)">今天</div>
-					{:else if cell.dateKey === cycleBounds.startKey}
-						<div class="text-[10px] text-neutral-400">周期起</div>
-					{:else if cell.dateKey === cycleBounds.endKey}
-						<div class="text-[10px] text-neutral-400">周期止</div>
+						<span class="text-[10px] leading-none text-(--primary)">今天</span>
 					{/if}
 				</button>
 			{/each}
 		</div>
+	</div>
 
-		<!-- 选中日期操作条 -->
-		<div class="mt-4 pt-3 border-t border-(--line-divider) flex flex-wrap items-center justify-between gap-3">
-			<div class="text-xs sm:text-sm text-neutral-600 dark:text-neutral-300">
-				选中日期：<span class="font-semibold text-neutral-900 dark:text-neutral-100">{selectedDateKey}</span>
-				{#if selectedRecord}
-					<span class="ml-2 text-emerald-600 dark:text-emerald-400">
-						已打卡（{selectedRecord.checkedAt}）
-					</span>
-				{:else}
-					<span class="ml-2 text-neutral-400">未打卡</span>
-				{/if}
+	<!-- 底部极简往期开关 -->
+	<div class="flex items-center justify-between text-xs text-neutral-400 px-1">
+		<span>点击「今日打卡」或日历格子会自动保存</span>
+		<button
+			type="button"
+			onclick={() => (showHistory = !showHistory)}
+			class="hover:text-(--primary) transition cursor-pointer"
+		>
+			{showHistory ? "收起各期统计" : `查看 ${viewCycleYear} 年各期统计`}
+		</button>
+	</div>
+
+	{#if showHistory}
+		<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-4">
+			<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+				{#each yearlyCyclesSummary as item}
+					<button
+						type="button"
+						onclick={() => (viewCycleMonth = item.cycleMonth)}
+						class={`rounded-xl border p-2 text-left transition cursor-pointer ${
+							item.cycleMonth === viewCycleMonth
+								? "border-(--primary) bg-(--primary)/10"
+								: item.met
+									? "border-emerald-500/35 bg-emerald-500/8"
+									: "border-(--line-divider) hover:border-(--primary)/40"
+						}`}
+					>
+						<div class="flex items-center justify-between text-xs">
+							<span class="font-medium text-neutral-800 dark:text-neutral-200">{item.title}</span>
+							{#if item.met}
+								<span class="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
+							{/if}
+						</div>
+						<div class="text-[10px] text-neutral-400">{item.shortRange}</div>
+						<div class="mt-0.5 text-sm font-bold text-neutral-900 dark:text-neutral-100">
+							{item.count}<span class="text-[11px] font-normal text-neutral-400">/{targetDays}</span>
+						</div>
+					</button>
+				{/each}
 			</div>
-
-			<div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-				<input
-					type="text"
-					maxlength="80"
-					bind:value={noteDraft}
-					placeholder="为该日添加备注..."
-					class="min-w-0 flex-1 sm:w-48 rounded-lg border border-(--line-divider) bg-transparent px-2.5 py-1.5 text-xs text-neutral-900 dark:text-neutral-100 focus:outline-none focus:border-(--primary)"
-				/>
-				<button
-					type="button"
-					disabled={isSaving}
-					onclick={handleSaveNoteForSelected}
-					class="rounded-lg bg-(--btn-regular-bg) px-3 py-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 hover:text-(--primary) transition cursor-pointer"
-				>
-					{selectedRecord ? "保存备注" : "补卡并保存"}
-				</button>
-				<button
-					type="button"
-					disabled={isSaving}
-					onclick={() => void handleToggleDate(selectedDateKey)}
-					class={`rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-						selectedRecord
-							? "border border-red-400/40 text-red-500 hover:bg-red-500/10"
-							: "bg-(--primary) text-white dark:text-black/80"
-					}`}
-				>
-					{selectedRecord ? "取消打卡" : "补签这天"}
-				</button>
-			</div>
 		</div>
-	</div>
-
-	<!-- 全年 12 个周期达标概览 -->
-	<div class="rounded-2xl border border-(--line-divider) bg-(--card-bg) p-4 sm:p-5">
-		<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
-			<h3 class="text-sm sm:text-base font-bold text-neutral-900 dark:text-neutral-100">
-				{viewCycleYear} 年各周期达标统计（目标 ≥ {store.targetDays} 天）
-			</h3>
-			<span class="text-xs text-neutral-500 dark:text-neutral-400">按每月 16 日 ~ 次月 15 日统计 · 点击快速跳转</span>
-		</div>
-		<div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
-			{#each yearlyCyclesSummary as item}
-				<button
-					type="button"
-					onclick={() => (viewCycleMonth = item.cycleMonth)}
-					class={`rounded-xl border p-2.5 text-left transition cursor-pointer ${
-						item.cycleMonth === viewCycleMonth
-							? "border-(--primary) bg-(--primary)/10"
-							: item.met
-								? "border-emerald-500/35 bg-emerald-500/8 hover:border-emerald-500/60"
-								: "border-(--line-divider) hover:border-(--primary)/40"
-					}`}
-				>
-					<div class="flex items-center justify-between text-xs">
-						<span class="font-semibold text-neutral-800 dark:text-neutral-200">
-							{item.title}
-						</span>
-						{#if item.met}
-							<span class="text-emerald-600 dark:text-emerald-400 font-bold">✓</span>
-						{:else if item.isCurrent}
-							<span class="text-[10px] text-(--primary)">当前</span>
-						{/if}
-					</div>
-					<div class="text-[10px] text-neutral-400 mt-0.5">{item.shortRange}</div>
-					<div class="mt-1 text-sm font-bold text-neutral-900 dark:text-neutral-100">
-						{item.count}
-						<span class="text-[11px] font-normal text-neutral-500">/ {store.targetDays}</span>
-					</div>
-				</button>
-			{/each}
-		</div>
-	</div>
-
-	<!-- 备份工具栏 -->
-	<div class="flex flex-wrap items-center justify-between gap-3 text-xs text-neutral-500 dark:text-neutral-400 px-1">
-		<div>
-			共累计记录 {Object.keys(store.records).length} 天 · 最近更新 {store.updatedAt ? new Date(store.updatedAt).toLocaleString("zh-CN") : "-"}
-		</div>
-		<div class="flex items-center gap-2">
-			<button
-				type="button"
-				onclick={exportJson}
-				class="rounded-lg border border-(--line-divider) px-2.5 py-1 hover:border-(--primary) hover:text-(--primary) transition cursor-pointer"
-			>
-				导出 JSON 备份
-			</button>
-			<button
-				type="button"
-				onclick={() => fileInputEl?.click()}
-				class="rounded-lg border border-(--line-divider) px-2.5 py-1 hover:border-(--primary) hover:text-(--primary) transition cursor-pointer"
-			>
-				导入恢复
-			</button>
-			<input
-				bind:this={fileInputEl}
-				type="file"
-				accept="application/json"
-				onchange={handleImportFile}
-				class="hidden"
-			/>
-		</div>
-	</div>
+	{/if}
 </div>

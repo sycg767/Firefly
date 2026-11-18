@@ -3,26 +3,25 @@ import { Icon } from "astro-icon/components";
 import CheckInBoard from "@/components/pages/checkin/CheckInBoard.svelte";
 import MainGridLayout from "@/layouts/MainGridLayout.astro";
 
-const title = "每日打卡记录";
-const description =
-	"按每月 16 日至次月 15 日为一个周期，实时统计是否达到 18 天打卡目标。";
+const title = "每日打卡";
+const description = "每月 16 日至次月 15 日 · 目标 18 天";
 ---
 
 <MainGridLayout title={title} description={description}>
 	<div class="flex w-full rounded-(--radius-large) overflow-hidden relative min-h-32">
-		<div class="card-base z-10 px-6 sm:px-9 py-6 relative w-full">
-			<div class="mb-6">
-				<div class="flex items-center gap-3 mb-2">
-					<div class="h-8 w-8 rounded-lg bg-(--primary) flex items-center justify-center text-white dark:text-black/70">
-						<Icon is:inline name="material-symbols:calendar-month" class="text-[1.4rem]" />
+		<div class="card-base z-10 px-5 sm:px-8 py-5 relative w-full">
+			<div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+				<div class="flex items-center gap-2.5">
+					<div class="h-7 w-7 rounded-lg bg-(--primary) flex items-center justify-center text-white dark:text-black/70">
+						<Icon is:inline name="material-symbols:calendar-month" class="text-[1.2rem]" />
 					</div>
-					<h1 class="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100">
+					<h1 class="text-xl sm:text-2xl font-bold text-neutral-900 dark:text-neutral-100">
 						{title}
 					</h1>
 				</div>
-				<p class="text-sm sm:text-base text-neutral-600 dark:text-neutral-400 leading-relaxed">
+				<span class="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400">
 					{description}
-				</p>
+				</span>
 			</div>
 
 			<CheckInBoard client:load />
