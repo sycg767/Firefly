@@ -1,0 +1,30 @@
+---
+import { Icon } from "astro-icon/components";
+import CheckInBoard from "@/components/pages/checkin/CheckInBoard.svelte";
+import MainGridLayout from "@/layouts/MainGridLayout.astro";
+
+const title = "每日打卡记录";
+const description = "记录每日打卡状态，实时统计每月是否达到 18 天目标。";
+---
+
+<MainGridLayout title={title} description={description}>
+	<div class="flex w-full rounded-(--radius-large) overflow-hidden relative min-h-32">
+		<div class="card-base z-10 px-6 sm:px-9 py-6 relative w-full">
+			<div class="mb-6">
+				<div class="flex items-center gap-3 mb-2">
+					<div class="h-8 w-8 rounded-lg bg-(--primary) flex items-center justify-center text-white dark:text-black/70">
+						<Icon is:inline name="material-symbols:calendar-month" class="text-[1.4rem]" />
+					</div>
+					<h1 class="text-2xl sm:text-3xl font-bold text-neutral-900 dark:text-neutral-100">
+						{title}
+					</h1>
+				</div>
+				<p class="text-sm sm:text-base text-neutral-600 dark:text-neutral-400 leading-relaxed">
+					{description}
+				</p>
+			</div>
+
+			<CheckInBoard client:load />
+		</div>
+	</div>
+</MainGridLayout>

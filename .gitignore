@@ -44,3 +44,6 @@ package/
 .mimocode
 .ace-tool/
 .reasonix/
+
+.vercel
+.env*
